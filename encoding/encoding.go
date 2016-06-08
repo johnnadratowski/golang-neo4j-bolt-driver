@@ -2,7 +2,43 @@ package messages
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
+	"math"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
+)
+
+const (
+	NIL_MARKER = 0xC0
+
+	TRUE_MARKER = 0xC3
+	FALSE_MARKER = 0xC2
+
+	INT8_MARKER = 0xC8
+	INT16_MARKER = 0xC9
+	INT32_MARKER = 0xCA
+	INT64_MARKER = 0xCB
+
+	FLOAT_MARKER = 0xC1
+
+	TINYSTRING_MARKER = 0x80
+	STRING8_MARKER = 0xD0
+	STRING16_MARKER = 0xD1
+	STRING32_MARKER = 0xD2
+
+	TINYLIST_MARKER = 0x90
+	LIST8_MARKER = 0xD4
+	LIST16_MARKER = 0xD5
+	LIST32_MARKER = 0xD6
+
+	TINYMAP_MARKER = 0xA0
+	MAP8_MARKER = 0xD8
+	MAP16_MARKER = 0xD9
+	MAP32_MARKER = 0xDA
+
+	TINYSTRUCT_MARKER = 0xB0
+	STRUCT8_MARKER = 0xDC
+	STRUCT16_MARKER = 0xDD
 )
 
 type Encoder struct {
@@ -14,6 +50,7 @@ func NewEncoder(w io.Writer) Encoder {
 }
 
 func (e Encoder) Encode(iVal interface{}) error {
+
 	// TODO: How to handle pointers?
 	//if reflect.TypeOf(iVal) == reflect.Ptr {
 	//	return Encode(*iVal)
@@ -45,35 +82,45 @@ func (e Encoder) Encode(iVal interface{}) error {
 		err = e.encodeInt(int64(val))
 	case uint64:
 		// TODO: Bolt docs only mention going up to int64, not uint64
-		// Must confirm this, because this would truncate
-		// Also, should this fail instead of truncate? - probably
+		// So I'll make this fail for now
+		if val > math.MaxInt64 {
+			return fmt.Errorf("Integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
+		}
 		err = e.encodeInt(int64(val))
-		//case float32:
-		//	err = e.encodeFloat32(val)
-		//case float64:
-		//	err = e.encodeFloat64(val)
-		//case string:
-		//	err = e.encodeString(val)
-		//case rune:
-		//	err = e.encodeRune(val)
-		//case byte:
-		//	err = e.encodeRune(val)
+	case float32:
+		err = e.encodeFloat(float64(val))
+	case float64:
+		err = e.encodeFloat(val)
+	case string:
+		err = e.encodeString(val)
+	case []interface{}:
+		// TODO: Support specific list types?
+		err = e.encodeList(val)
+	case map[string]interface{}:
+		// TODO: Support keys other than strings?
+		// TODO: Support specific map types?
+		err = e.encodeMap(val)
+	case structures.Structure:
+		err = e.encodeStructure(val)
+	default:
+		// TODO: How to handle rune or byte?
+		return fmt.Errorf("Unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
 	}
 
 	return err
 }
 
 func (e Encoder) encodeNil() error {
-	_, err := e.Write([]byte{0xC0})
+	_, err := e.Write([]byte{NIL_MARKER})
 	return err
 }
 
 func (e Encoder) encodeBool(val bool) error {
 	var err error
 	if val {
-		_, err = e.Write([]byte{0xC3})
+		_, err = e.Write([]byte{TRUE_MARKER})
 	} else {
-		_, err = e.Write([]byte{0xC2})
+		_, err = e.Write([]byte{FALSE_MARKER})
 	}
 	return err
 }
@@ -83,81 +130,199 @@ func (e Encoder) encodeInt(val int64) error {
 	switch val {
 	case val >= -9223372036854775808 && val <= -2147483649:
 		// Write as INT_64
-		if _, err = e.Write([]byte{0xCB}); err != nil {
+		if _, err = e.Write([]byte{INT64_MARKER}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, val)
 	case val >= -2147483648 && val <= -32769:
 		// Write as INT_32
-		if _, err = e.Write([]byte{0xCA}); err != nil {
+		if _, err = e.Write([]byte{INT32_MARKER}); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		err = binary.Write(e, binary.BigEndian, int32(val))
 	case val >= -32768 && val <= -129:
 		// Write as INT_16
-		if _, err = e.Write([]byte{0xC9}); err != nil {
+		if _, err = e.Write([]byte{INT16_MARKER}); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		err = binary.Write(e, binary.BigEndian, int16(val))
 	case val >= -128 && val <= -17:
 		// Write as INT_8
-		if _, err = e.Write([]byte{0xC8}); err != nil {
+		if _, err = e.Write([]byte{INT8_MARKER}); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		err = binary.Write(e, binary.BigEndian, int8(val))
 	case val >= -16 && val <= 127:
 		// Write as TINY_INT
-		err = binary.Write(e, binary.BigEndian, val)
+		err = binary.Write(e, binary.BigEndian, int8(val))
 	case val >= 128 && val <= 32767:
 		// Write as INT_16
-		if _, err = e.Write([]byte{0xC9}); err != nil {
+		if _, err = e.Write([]byte{INT16_MARKER}); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		err = binary.Write(e, binary.BigEndian, int16(val))
 	case val >= 32768 && val <= 2147483647:
 		// Write as INT_32
-		if _, err = e.Write([]byte{0xCA}); err != nil {
+		if _, err = e.Write([]byte{INT32_MARKER}); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		err = binary.Write(e, binary.BigEndian, int32(val))
 	case val >= 2147483648 && val <= 9223372036854775807:
 		// Write as INT_64
-		if _, err = e.Write([]byte{0xCB}); err != nil {
+		if _, err = e.Write([]byte{INT64_MARKER}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, val)
+	default:
+		// Can't happen, but if I change the implementation for uint64
+		// I want to catch the case if I missed it
+		return fmt.Errorf("String too long to write: %s", val)
 	}
 	return err
 }
 
-//func encodeMap(m map[string]interface{}) (*bytes.Buffer, error) {
-//	var output []byte
-//	length := len(m)
-//	switch length {
-//	case length <= 15:
-//		output = []byte{0xA + length}
-//	case length > 15 && length <= 255:
-//		output = []byte{0xD8, length}
-//	case length > 255 && length <= 65535:
-//		output = []byte{0xD9, length}
-//	case length > 65535 && length <= 4294967295:
-//		output = []byte{0xDA, length}
-//	default:
-//		return nil, fmt.Errorf("Map length too long. Max: 4294967295 Got: %d", length)
-//	}
-//
-//	for k, v := range m {
-//		encodedKey, err := Encode(k)
-//		if err != nil {
-//			return nil, err
-//		}
-//		encodedValue, err := Encode(v)
-//		if err != nil {
-//			return nil, err
-//		}
-//		output = append(output, encodedKey...)
-//		output = append(output, encodedValue...)
-//	}
-//
-//	return output
-//}
+func (e Encoder) encodeFloat(val float64) error {
+	if _, err := e.Write([]byte{FLOAT_MARKER}); err != nil {
+		return err
+	}
+	err := binary.Write(e, binary.BigEndian, val)
+	return err
+}
+
+func (e Encoder) encodeString(val string) error {
+	var err error
+	bytes := []byte(val)
+
+	length := len(bytes)
+	switch length {
+	case length <= 15:
+		if _, err := e.Write([]byte{TINYSTRING_MARKER} + length); err != nil {
+			return err
+		}
+		_, err = e.Write(bytes)
+	case length >= 16 && length <= 255:
+		if _, err := e.Write([]byte{STRING8_MARKER, length}); err != nil {
+			return err
+		}
+		_, err = e.Write(bytes)
+	case length >= 256 && length <= 65535:
+		if _, err := e.Write([]byte{STRING16_MARKER, length}); err != nil {
+			return err
+		}
+		_, err = e.Write(bytes)
+	case length >= 65536 && length <= 4294967295:
+		if _, err := e.Write([]byte{STRING32_MARKER, length}); err != nil {
+			return err
+		}
+		_, err = e.Write(bytes)
+	default:
+		// TODO: Can this happen? Does go have a limit on the length?
+		// Quick google turned up nothing
+		return fmt.Errorf("String too long to write: %s", val)
+	}
+	return err
+}
+
+func (e Encoder) encodeList(val []interface{}) error {
+	length := len(val)
+	switch length {
+	case length <= 15:
+		if _, err := e.Write([]byte{TINYLIST_MARKER} + length); err != nil {
+			return err
+		}
+	case length >= 16 && length <= 255:
+		if _, err := e.Write([]byte{LIST8_MARKER, length}); err != nil {
+			return err
+		}
+	case length >= 256 && length <= 65535:
+		if _, err := e.Write([]byte{LIST16_MARKER, length}); err != nil {
+			return err
+		}
+	case length >= 65536 && length <= 4294967295:
+		if _, err := e.Write([]byte{LIST32_MARKER, length}); err != nil {
+			return err
+		}
+	default:
+		// TODO: Can this happen? Does go have a limit on the length?
+		return fmt.Errorf("List too long to write: %+v", val)
+	}
+
+	// Encode list values
+	for _, item := range val {
+		if err := e.Encode(item); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (e Encoder) encodeMap(val map[string]interface{}) error {
+	length := len(val)
+	switch length {
+	case length <= 15:
+		if _, err := e.Write([]byte{TINYMAP_MARKER} + length); err != nil {
+			return err
+		}
+	case length >= 16 && length <= 255:
+		if _, err := e.Write([]byte{MAP8_MARKER, length}); err != nil {
+			return err
+		}
+	case length >= 256 && length <= 65535:
+		if _, err := e.Write([]byte{MAP16_MARKER, length}); err != nil {
+			return err
+		}
+	case length >= 65536 && length <= 4294967295:
+		if _, err := e.Write([]byte{MAP32_MARKER, length}); err != nil {
+			return err
+		}
+	default:
+		// TODO: Can this happen? Does go have a limit on the length?
+		return fmt.Errorf("Map too long to write: %+v", val)
+	}
+
+	// Encode list values
+	for k, v := range val {
+		if err := e.Encode(k); err != nil {
+			return err
+		}
+		if err := e.Encode(v); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (e Encoder) encodeStructure(val structures.Structure) error {
+	e.Write(val.Signature())
+
+	fields := val.Fields()
+	length := len(fields)
+	switch length {
+	case length <= 15:
+		if _, err := e.Write([]byte{TINYSTRUCT_MARKER} + length); err != nil {
+			return err
+		}
+	case length >= 16 && length <= 255:
+		if _, err := e.Write([]byte{STRUCT8_MARKER, length}); err != nil {
+			return err
+		}
+	case length >= 256 && length <= 65535:
+		if _, err := e.Write([]byte{STRUCT16_MARKER, length}); err != nil {
+			return err
+		}
+	default:
+		// TODO: Can this happen? Does go have a limit on the length?
+		return fmt.Errorf("Structure too long to write: %+v", val)
+	}
+
+	for _, field := range fields {
+		if err := e.Encode(field); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
