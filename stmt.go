@@ -9,8 +9,8 @@ import (
 type Stmt interface {
 	Close() error
 	NumInput() int
-	Exec(args []driver.Value) (Result, error)
-	Query(args []driver.Value) (Rows, error)
+	Exec(args []driver.Value) (driver.Result, error)
+	Query(args []driver.Value) (driver.Rows, error)
 }
 
 type boltStmt struct {
@@ -20,12 +20,13 @@ type boltStmt struct {
 }
 
 func newStmt(query string, conn Conn) Stmt {
-	return boltStmt{query: query, conn: conn}
+	return &boltStmt{query: query, conn: conn}
 }
 
 // Close Closes the statement. See sql/driver.Stmt.
 func (s *boltStmt) Close() error {
 	s.closed = true
+	return nil
 }
 
 // NumInput returns the number of placeholder parameters. See sql/driver.Stmt.
@@ -34,9 +35,9 @@ func (s *boltStmt) NumInput() int {
 }
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
-func (s *boltStmt) Exec(args []Value) (Result, error) {
+func (s *boltStmt) Exec(args []driver.Value) (driver.Result, error) {
 	if s.closed {
-		return fmt.Errorf("Neo4j Bolt statement already closed")
+		return nil, fmt.Errorf("Neo4j Bolt statement already closed")
 	}
 
 	// TODO: Implement
@@ -45,9 +46,9 @@ func (s *boltStmt) Exec(args []Value) (Result, error) {
 }
 
 // Exec executes a query that returns data. See sql/driver.Stmt.
-func (s *boltStmt) Query(args []Value) (Rows, error) {
+func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
 	if s.closed {
-		return fmt.Errorf("Neo4j Bolt statement already closed")
+		return nil, fmt.Errorf("Neo4j Bolt statement already closed")
 	}
 
 	// TODO: Implement

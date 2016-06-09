@@ -1,12 +1,15 @@
 package golangNeo4jBoltDriver
 
-import "net"
+import (
+	"database/sql/driver"
+	"net"
+)
 
 // Conn represents a connection to Neo4J
 type Conn interface {
-	Prepare(query string) (Stmt, error)
+	Prepare(query string) (driver.Stmt, error)
 	Close() error
-	Begin() (Tx, error)
+	Begin() (driver.Tx, error)
 }
 
 type boltConn struct {
@@ -17,12 +20,12 @@ type boltConn struct {
 }
 
 // Prepare prepares a new statement for a query
-func (c *boltConn) Prepare(query string) (Stmt, error) {
-	return newStmt(query, c)
+func (c *boltConn) Prepare(query string) (driver.Stmt, error) {
+	return newStmt(query, c), nil
 }
 
 // Begin begins a new transaction with the Neo4J Database
-func (c *boltConn) Begin() (Tx, error) {
+func (c *boltConn) Begin() (driver.Tx, error) {
 	// TODO: Implement
 	return nil, nil
 }

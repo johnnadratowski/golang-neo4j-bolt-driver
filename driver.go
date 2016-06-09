@@ -2,6 +2,8 @@ package golangNeo4jBoltDriver
 
 import (
 	"bytes"
+	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -34,7 +36,7 @@ func init() {
 
 // Driver is a driver allowing connection to Neo4j
 type Driver interface {
-	Open(string) (Conn, error)
+	Open(string) (driver.Conn, error)
 }
 
 type boltDriver struct {
@@ -46,7 +48,7 @@ func NewDriver() Driver {
 }
 
 // Open opens a new Bolt connection to the Neo4J database
-func (b *boltDriver) Open(connStr string) (Conn, error) {
+func (b *boltDriver) Open(connStr string) (driver.Conn, error) {
 	var err error
 	c := &boltConn{connStr: connStr, serverVersion: make([]byte, 4)}
 	c.conn, err = net.Dial("tcp", c.connStr)
@@ -70,4 +72,8 @@ func (b *boltDriver) Open(connStr string) (Conn, error) {
 	}
 
 	return c, nil
+}
+
+func init() {
+	sql.Register("neo4j-cypher", &boltDriver{})
 }

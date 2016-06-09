@@ -1,7 +1,5 @@
 package golangNeo4jBoltDriver
 
-import "database/sql/driver"
-
 // Result represents a result from a query that returns no data
 type Result interface {
 	LastInsertId() (int64, error)
@@ -13,7 +11,7 @@ type boltResult struct {
 	rowsAffected int64
 }
 
-func newResult(rowsAffected int64) {
+func newResult(rowsAffected int64) boltResult {
 	return boltResult{rowsAffected: rowsAffected}
 }
 
