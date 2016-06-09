@@ -1,4 +1,4 @@
-package golang_neo4j_bolt_driver
+package golangNeo4jBoltDriver
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	// Logger is the logger to use for the driver. Defaults to discarding logs.
 	Logger            = log.New(ioutil.Discard, "", log.LstdFlags)
 	magicPreamble     = []byte{0x60, 0x60, 0xb0, 0x17}
 	supportedVersions = []byte{
@@ -19,8 +20,10 @@ var (
 		0x00, 0x00, 0x00, 0x00,
 	}
 	noVersionSupported = []byte{0x00, 0x00, 0x00, 0x00}
-	version = "1.0"
-	clientID = "GolangNeo4jBolt/" + version
+	// Version is the current version of this driver
+	Version = "1.0"
+	// ClientID is the id of this client
+	ClientID = "GolangNeo4jBolt/" + Version
 )
 
 func init() {
@@ -29,6 +32,7 @@ func init() {
 	}
 }
 
+// Driver is a driver allowing connection to Neo4j
 type Driver interface {
 	Open(string) (Conn, error)
 }
@@ -36,10 +40,12 @@ type Driver interface {
 type boltDriver struct {
 }
 
+// NewDriver creates a new Driver object
 func NewDriver() Driver {
 	return &boltDriver{}
 }
 
+// Open opens a new Bolt connection to the Neo4J database
 func (b *boltDriver) Open(connStr string) (Conn, error) {
 	var err error
 	c := &boltConn{connStr: connStr, serverVersion: make([]byte, 4)}

@@ -1,4 +1,4 @@
-package golang_neo4j_bolt_driver
+package golangNeo4jBoltDriver
 
 import (
 	"bytes"

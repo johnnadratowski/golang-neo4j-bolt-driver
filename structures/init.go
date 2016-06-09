@@ -1,5 +1,10 @@
 package structures
 
+const (
+	// InitMessageSignature is the signature byte for the INIT message
+	InitMessageSignature = 0x01
+)
+
 // InitMessage Represents an INIT message
 type InitMessage struct {
 	clientName string
@@ -14,10 +19,13 @@ func NewInitMessage(clientName string, authToken map[string]interface{}) InitMes
 	}
 }
 
+// Signature gets the signature byte for the struct
 func (i InitMessage) Signature() int {
-	return 0x01
+	return InitMessageSignature
 }
 
+// Fields gets the fields to encode for the struct
 func (i InitMessage) Fields() []interface{} {
 	return []interface{}{i.clientName, i.authToken}
 }
+
