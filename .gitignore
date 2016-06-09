@@ -56,6 +56,3 @@ tags
 # Visual Studio code
 .vscode/
 
-# Give myself a playground to try stuff out
-/playground/
-

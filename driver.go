@@ -2,11 +2,11 @@ package golangNeo4jBoltDriver
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
-	"fmt"
 )
 
 var (

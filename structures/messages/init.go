@@ -1,4 +1,4 @@
-package structures
+package messages
 
 const (
 	// InitMessageSignature is the signature byte for the INIT message
@@ -28,4 +28,3 @@ func (i InitMessage) Signature() int {
 func (i InitMessage) Fields() []interface{} {
 	return []interface{}{i.clientName, i.authToken}
 }
-

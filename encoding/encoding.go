@@ -133,8 +133,8 @@ func (e Encoder) Encode(iVal interface{}) error {
 		// TODO: Support keys other than strings?
 		// TODO: Support specific map types?
 		err = e.encodeMap(val)
-	case structures.Structure:
-		err = e.encodeStructure(val)
+	case structures.MessageStructure:
+		err = e.encodeMessageStructure(val)
 	default:
 		// TODO: How to handle rune or byte?
 		return fmt.Errorf("Unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
@@ -335,8 +335,8 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 	return nil
 }
 
-// encodeStructure encodes a nil object to the stream
-func (e Encoder) encodeStructure(val structures.Structure) error {
+// encodeMessageStructure encodes a nil object to the stream
+func (e Encoder) encodeMessageStructure(val structures.Structure) error {
 	e.Write([]byte{byte(val.Signature())})
 
 	fields := val.Fields()
