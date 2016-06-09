@@ -6,8 +6,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
 	"bytes"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
 )
 
 const (
@@ -64,7 +64,6 @@ const (
 	Struct8Marker = 0xDC
 	// Struct16Marker represents the encoding marker byte for a struct object
 	Struct16Marker = 0xDD
-
 )
 
 var (
@@ -84,19 +83,19 @@ var (
 // Implements io.WriteCloser, and chunks the encoded payload to
 // the underlying writer
 type Encoder struct {
-	writer io.Writer
-	buf *bytes.Buffer
+	writer    io.Writer
+	buf       *bytes.Buffer
 	chunkSize int
-	written bool
-	closed bool
+	written   bool
+	closed    bool
 }
 
 // NewEncoder Creates a new Encoder object
 func NewEncoder(w io.Writer, chunkSize int) Encoder {
 	return Encoder{
-		writer: w,
-		buf: *bytes.Buffer{},
-		chunkSize:chunkSize,
+		writer:    w,
+		buf:       *bytes.Buffer{},
+		chunkSize: chunkSize,
 	}
 }
 
@@ -107,6 +106,7 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 	} else if !e.written {
 		e.written = true
 	}
+
 	length := e.buf.Len()
 	if length >= e.chunkSize {
 		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
@@ -114,9 +114,9 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 		}
 
 		return e.buf.WriteTo(e.writer)
-	} else {
-		return e.buf.Write(p)
 	}
+
+	return e.buf.Write(p)
 }
 
 // Close closes and flushes the Encoder
