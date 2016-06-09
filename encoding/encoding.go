@@ -41,14 +41,24 @@ const (
 	STRUCT16_MARKER = 0xDD
 )
 
+// Encoder encodes objects of different types to the given stream.
+// Attempts to support all builtin golang types, when it can be confidently
+// mapped to a data type from: http://alpha.neohq.net/docs/server-manual/bolt-serialization.html#bolt-packstream-structures
+// (version v3.1.0-M02 at the time of writing this.
+//
+// Maps and Slices are a special case, where only
+// map[string]interface{} and []interface{} are supported.
+// The interface for maps and slices may be more permissive in the future.
 type Encoder struct {
 	io.Writer
 }
 
+// NewEncoder Creates a new Encoder object
 func NewEncoder(w io.Writer) Encoder {
 	return Encoder{Writer: w}
 }
 
+// Encode encodes an object to the stream
 func (e Encoder) Encode(iVal interface{}) error {
 
 	// TODO: How to handle pointers?
@@ -110,11 +120,13 @@ func (e Encoder) Encode(iVal interface{}) error {
 	return err
 }
 
+// encodeNil encodes a nil object to the stream
 func (e Encoder) encodeNil() error {
 	_, err := e.Write([]byte{NIL_MARKER})
 	return err
 }
 
+// encodeBool encodes a nil object to the stream
 func (e Encoder) encodeBool(val bool) error {
 	var err error
 	if val {
@@ -125,6 +137,7 @@ func (e Encoder) encodeBool(val bool) error {
 	return err
 }
 
+// encodeInt encodes a nil object to the stream
 func (e Encoder) encodeInt(val int64) error {
 	var err error
 	switch val {
@@ -181,6 +194,7 @@ func (e Encoder) encodeInt(val int64) error {
 	return err
 }
 
+// encodeFloat encodes a nil object to the stream
 func (e Encoder) encodeFloat(val float64) error {
 	if _, err := e.Write([]byte{FLOAT_MARKER}); err != nil {
 		return err
@@ -189,6 +203,7 @@ func (e Encoder) encodeFloat(val float64) error {
 	return err
 }
 
+// encodeString encodes a nil object to the stream
 func (e Encoder) encodeString(val string) error {
 	var err error
 	bytes := []byte(val)
@@ -223,6 +238,7 @@ func (e Encoder) encodeString(val string) error {
 	return err
 }
 
+// encodeList encodes a nil object to the stream
 func (e Encoder) encodeList(val []interface{}) error {
 	length := len(val)
 	switch length {
@@ -257,6 +273,7 @@ func (e Encoder) encodeList(val []interface{}) error {
 	return nil
 }
 
+// encodeMap encodes a nil object to the stream
 func (e Encoder) encodeMap(val map[string]interface{}) error {
 	length := len(val)
 	switch length {
@@ -294,6 +311,7 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 	return nil
 }
 
+// encodeStructure encodes a nil object to the stream
 func (e Encoder) encodeStructure(val structures.Structure) error {
 	e.Write(val.Signature())
 
