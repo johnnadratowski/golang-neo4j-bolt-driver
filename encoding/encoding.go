@@ -140,7 +140,7 @@ func (e Encoder) encodeBool(val bool) error {
 // encodeInt encodes a nil object to the stream
 func (e Encoder) encodeInt(val int64) error {
 	var err error
-	switch val {
+	switch {
 	case val >= -9223372036854775808 && val <= -2147483649:
 		// Write as INT_64
 		if _, err = e.Write([]byte{INT64_MARKER}); err != nil {
@@ -209,24 +209,25 @@ func (e Encoder) encodeString(val string) error {
 	bytes := []byte(val)
 
 	length := len(bytes)
-	switch length {
+	switch {
 	case length <= 15:
-		if _, err := e.Write([]byte{TINYSTRING_MARKER} + length); err != nil {
+		if _, err := e.Write([]byte{byte(TINYSTRING_MARKER + length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length >= 16 && length <= 255:
-		if _, err := e.Write([]byte{STRING8_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{STRING8_MARKER, byte(length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length >= 256 && length <= 65535:
-		if _, err := e.Write([]byte{STRING16_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{STRING16_MARKER, byte(length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length >= 65536 && length <= 4294967295:
-		if _, err := e.Write([]byte{STRING32_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{STRING32_MARKER, byte(length)}); err != nil {
+			// encodeNil encodes a nil object to the stream
 			return err
 		}
 		_, err = e.Write(bytes)
@@ -241,21 +242,21 @@ func (e Encoder) encodeString(val string) error {
 // encodeList encodes a nil object to the stream
 func (e Encoder) encodeList(val []interface{}) error {
 	length := len(val)
-	switch length {
+	switch {
 	case length <= 15:
-		if _, err := e.Write([]byte{TINYLIST_MARKER} + length); err != nil {
+		if _, err := e.Write([]byte{byte(TINYLIST_MARKER + length)}); err != nil {
 			return err
 		}
 	case length >= 16 && length <= 255:
-		if _, err := e.Write([]byte{LIST8_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{LIST8_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	case length >= 256 && length <= 65535:
-		if _, err := e.Write([]byte{LIST16_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{LIST16_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	case length >= 65536 && length <= 4294967295:
-		if _, err := e.Write([]byte{LIST32_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{LIST32_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	default:
@@ -276,21 +277,21 @@ func (e Encoder) encodeList(val []interface{}) error {
 // encodeMap encodes a nil object to the stream
 func (e Encoder) encodeMap(val map[string]interface{}) error {
 	length := len(val)
-	switch length {
+	switch {
 	case length <= 15:
-		if _, err := e.Write([]byte{TINYMAP_MARKER} + length); err != nil {
+		if _, err := e.Write([]byte{byte(TINYMAP_MARKER + length)}); err != nil {
 			return err
 		}
 	case length >= 16 && length <= 255:
-		if _, err := e.Write([]byte{MAP8_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{MAP8_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	case length >= 256 && length <= 65535:
-		if _, err := e.Write([]byte{MAP16_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{MAP16_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	case length >= 65536 && length <= 4294967295:
-		if _, err := e.Write([]byte{MAP32_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{MAP32_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	default:
@@ -313,21 +314,21 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 
 // encodeStructure encodes a nil object to the stream
 func (e Encoder) encodeStructure(val structures.Structure) error {
-	e.Write(val.Signature())
+	e.Write([]byte{byte(val.Signature())})
 
 	fields := val.Fields()
 	length := len(fields)
-	switch length {
+	switch {
 	case length <= 15:
-		if _, err := e.Write([]byte{TINYSTRUCT_MARKER} + length); err != nil {
+		if _, err := e.Write([]byte{byte(TINYSTRUCT_MARKER + length)}); err != nil {
 			return err
 		}
 	case length >= 16 && length <= 255:
-		if _, err := e.Write([]byte{STRUCT8_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{STRUCT8_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	case length >= 256 && length <= 65535:
-		if _, err := e.Write([]byte{STRUCT16_MARKER, length}); err != nil {
+		if _, err := e.Write([]byte{STRUCT16_MARKER, byte(length)}); err != nil {
 			return err
 		}
 	default:

@@ -1,7 +1,5 @@
 package structures
 
-import "io"
-
 // InitMessage Represents an INIT message
 type InitMessage struct {
 	clientName string
