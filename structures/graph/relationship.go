@@ -2,7 +2,7 @@ package messages
 
 const (
 	// RelationshipSignature is the signature byte for a Relationship object
-	RelationshipSignature = 0x4E
+	RelationshipSignature = 0x52
 )
 
 // Relationship Represents a Relationship structure
