@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
+	"bytes"
 )
 
 const (
@@ -63,6 +64,12 @@ const (
 	Struct8Marker = 0xDC
 	// Struct16Marker represents the encoding marker byte for a struct object
 	Struct16Marker = 0xDD
+
+)
+
+var (
+	// EndMessage is the data to send to end a message
+	EndMessage = []byte{byte(0x00), byte(0x00)}
 )
 
 // Encoder encodes objects of different types to the given stream.
@@ -73,13 +80,64 @@ const (
 // Maps and Slices are a special case, where only
 // map[string]interface{} and []interface{} are supported.
 // The interface for maps and slices may be more permissive in the future.
+//
+// Implements io.WriteCloser, and chunks the encoded payload to
+// the underlying writer
 type Encoder struct {
-	io.Writer
+	writer io.Writer
+	buf *bytes.Buffer
+	chunkSize int
+	written bool
+	closed bool
 }
 
 // NewEncoder Creates a new Encoder object
-func NewEncoder(w io.Writer) Encoder {
-	return Encoder{Writer: w}
+func NewEncoder(w io.Writer, chunkSize int) Encoder {
+	return Encoder{
+		writer: w,
+		buf: *bytes.Buffer{},
+		chunkSize:chunkSize,
+	}
+}
+
+// Write writes to the writer.  Buffers the writes using chunkSize.
+func (e Encoder) Write(p []byte) (n int, err error) {
+	if e.closed {
+		return 0, fmt.Errorf("Encoder is closed")
+	} else if !e.written {
+		e.written = true
+	}
+	length := e.buf.Len()
+	if length >= e.chunkSize {
+		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
+			return 0, err
+		}
+
+		return e.buf.WriteTo(e.writer)
+	} else {
+		return e.buf.Write(p)
+	}
+}
+
+// Close closes and flushes the Encoder
+func (e Encoder) Close() error {
+	if e.closed {
+		return nil
+	}
+
+	e.closed = true
+	length := e.buf.Len()
+	if length > 0 {
+		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
+			return err
+		}
+
+		if _, err := e.buf.WriteTo(e.writer); err != nil {
+			return err
+		}
+
+		e.writer.Write(EndMessage)
+	}
 }
 
 // Encode encodes an object to the stream
