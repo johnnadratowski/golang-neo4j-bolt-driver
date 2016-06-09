@@ -7,9 +7,9 @@ const (
 
 // UnboundRelationship Represents a UnboundRelationship structure
 type UnboundRelationship struct {
-	RelIdentity       int
-	Type              string
-	Properties        map[string]interface{}
+	RelIdentity int
+	Type        string
+	Properties  map[string]interface{}
 }
 
 // Signature gets the signature byte for the struct

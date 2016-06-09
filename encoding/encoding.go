@@ -3,9 +3,9 @@ package messages
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
 	"io"
 	"math"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
 )
 
 const (
@@ -367,4 +367,3 @@ func (e Encoder) encodeMessageStructure(val structures.Structure) error {
 
 	return nil
 }
-
