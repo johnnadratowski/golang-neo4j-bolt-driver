@@ -75,5 +75,5 @@ func (b *boltDriver) Open(connStr string) (driver.Conn, error) {
 }
 
 func init() {
-	sql.Register("neo4j-cypher", &boltDriver{})
+	sql.Register("neo4j-bolt", &boltDriver{})
 }
