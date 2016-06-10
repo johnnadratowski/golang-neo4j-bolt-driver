@@ -107,6 +107,7 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 		e.written = true
 	}
 
+	// TODO: Reset on Error? Close on error?
 	length := e.buf.Len()
 	if length >= e.chunkSize {
 		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
@@ -125,6 +126,7 @@ func (e Encoder) Close() error {
 		return nil
 	}
 
+	// TODO: Reset on Error? Close on error?
 	e.closed = true
 	length := e.buf.Len()
 	if length > 0 {
@@ -142,6 +144,8 @@ func (e Encoder) Close() error {
 
 // Encode encodes an object to the stream
 func (e Encoder) Encode(iVal interface{}) error {
+
+	// TODO: Reset on Error? Close on error?
 
 	// TODO: How to handle pointers?
 	//if reflect.TypeOf(iVal) == reflect.Ptr {
