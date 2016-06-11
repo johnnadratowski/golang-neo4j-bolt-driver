@@ -22,7 +22,7 @@ func (i SuccessMessage) Signature() int {
 	return SuccessMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i SuccessMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i SuccessMessage) AllFields() []interface{} {
 	return []interface{}{i.metadata}
 }

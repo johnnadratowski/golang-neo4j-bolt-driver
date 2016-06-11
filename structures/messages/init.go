@@ -12,7 +12,20 @@ type InitMessage struct {
 }
 
 // NewInitMessage Gets a new InitMessage struct
-func NewInitMessage(clientName string, authToken map[string]interface{}) InitMessage {
+func NewInitMessage(clientName string, credentials string) InitMessage {
+	var authToken map[string]interface{}
+	if credentials == "" {
+		authToken = map[string]interface{}{
+			"scheme": "none",
+		}
+	} else {
+		authToken = map[string]interface{}{
+			"scheme":      "basic",
+			"principal":   "neo4j",
+			"credentials": credentials,
+		}
+	}
+
 	return InitMessage{
 		clientName: clientName,
 		authToken:  authToken,
@@ -24,7 +37,7 @@ func (i InitMessage) Signature() int {
 	return InitMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i InitMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i InitMessage) AllFields() []interface{} {
 	return []interface{}{i.clientName, i.authToken}
 }

@@ -22,7 +22,7 @@ func (i IgnoredMessage) Signature() int {
 	return IgnoredMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i IgnoredMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i IgnoredMessage) AllFields() []interface{} {
 	return []interface{}{i.metadata}
 }

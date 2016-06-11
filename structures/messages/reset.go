@@ -18,7 +18,7 @@ func (i ResetMessage) Signature() int {
 	return ResetMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i ResetMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i ResetMessage) AllFields() []interface{} {
 	return []interface{}{}
 }

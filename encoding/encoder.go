@@ -1,4 +1,4 @@
-package messages
+package encoding
 
 import (
 	"encoding/binary"
@@ -79,55 +79,41 @@ var (
 // Maps and Slices are a special case, where only
 // map[string]interface{} and []interface{} are supported.
 // The interface for maps and slices may be more permissive in the future.
-//
-// Implements io.WriteCloser, and chunks the encoded payload to
-// the underlying writer
 type Encoder struct {
 	writer    io.Writer
 	buf       *bytes.Buffer
-	chunkSize int
-	written   bool
-	closed    bool
+	chunkSize uint16
 }
 
 // NewEncoder Creates a new Encoder object
-func NewEncoder(w io.Writer, chunkSize int) Encoder {
+func NewEncoder(w io.Writer, chunkSize uint16) Encoder {
 	return Encoder{
 		writer:    w,
-		buf:       *bytes.Buffer{},
+		buf:       &bytes.Buffer{},
 		chunkSize: chunkSize,
 	}
 }
 
-// Write writes to the writer.  Buffers the writes using chunkSize.
+// write writes to the writer.  Buffers the writes using chunkSize.
 func (e Encoder) Write(p []byte) (n int, err error) {
-	if e.closed {
-		return 0, fmt.Errorf("Encoder is closed")
-	} else if !e.written {
-		e.written = true
-	}
 
 	// TODO: Reset on Error? Close on error?
 	length := e.buf.Len()
-	if length >= e.chunkSize {
+	if length >= int(e.chunkSize) {
 		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
 			return 0, err
 		}
 
-		return e.buf.WriteTo(e.writer)
+		numWritten, err := e.buf.WriteTo(e.writer)
+		// TODO: Probably shouldn't downcast here
+		return int(numWritten), err
 	}
 
 	return e.buf.Write(p)
 }
 
-// Close closes and flushes the Encoder
-func (e Encoder) Close() error {
-	if e.closed {
-		return nil
-	}
-
-	// TODO: Reset on Error? Close on error?
-	e.closed = true
+// flush finishes the encoding stream by flushing it to the writer
+func (e Encoder) flush() error {
 	length := e.buf.Len()
 	if length > 0 {
 		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
@@ -137,15 +123,18 @@ func (e Encoder) Close() error {
 		if _, err := e.buf.WriteTo(e.writer); err != nil {
 			return err
 		}
-
-		e.writer.Write(EndMessage)
 	}
+
+	e.writer.Write(EndMessage)
+
+	return nil
 }
 
 // Encode encodes an object to the stream
 func (e Encoder) Encode(iVal interface{}) error {
 
-	// TODO: Reset on Error? Close on error?
+	// Whatever is left in the buffer for the chunk, write it out
+	defer e.flush()
 
 	// TODO: How to handle pointers?
 	//if reflect.TypeOf(iVal) == reflect.Ptr {
@@ -399,10 +388,10 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 }
 
 // encodeMessageStructure encodes a nil object to the stream
-func (e Encoder) encodeMessageStructure(val structures.Structure) error {
+func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
 	e.Write([]byte{byte(val.Signature())})
 
-	fields := val.Fields()
+	fields := val.AllFields()
 	length := len(fields)
 	switch {
 	case length <= 15:

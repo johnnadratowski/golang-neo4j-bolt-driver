@@ -18,7 +18,7 @@ func (i AckFailureMessage) Signature() int {
 	return AckFailureMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i AckFailureMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i AckFailureMessage) AllFields() []interface{} {
 	return []interface{}{}
 }

@@ -24,7 +24,7 @@ func (i RunMessage) Signature() int {
 	return RunMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i RunMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i RunMessage) AllFields() []interface{} {
 	return []interface{}{i.statement, i.parameters}
 }

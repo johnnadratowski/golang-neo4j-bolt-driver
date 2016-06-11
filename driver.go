@@ -9,6 +9,9 @@ import (
 	"log"
 	"net"
 	"os"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
 var (
@@ -37,41 +40,90 @@ func init() {
 // Driver is a driver allowing connection to Neo4j
 type Driver interface {
 	Open(string) (driver.Conn, error)
+	SetCredentials(string)
+	SetTimeout(int)
+	SetChunkSize(uint16)
 }
 
 type boltDriver struct {
+	credentials    string
+	timeoutSeconds int
+	chunkSize      uint16
 }
 
 // NewDriver creates a new Driver object
-func NewDriver() Driver {
-	return &boltDriver{}
+func NewDriver(credentials string, timeoutSeconds int, chunkSize uint16) Driver {
+	return &boltDriver{
+		timeoutSeconds: timeoutSeconds,
+		chunkSize:      chunkSize,
+	}
 }
 
 // Open opens a new Bolt connection to the Neo4J database
 func (b *boltDriver) Open(connStr string) (driver.Conn, error) {
-	var err error
-	c := &boltConn{connStr: connStr, serverVersion: make([]byte, 4)}
-	c.conn, err = net.Dial("tcp", c.connStr)
+	if b.chunkSize == 0 {
+		// TODO: Test best default
+		// Default to 2048 byte chunks
+		b.chunkSize = 2048
+	}
+
+	if b.timeoutSeconds == 0 {
+		// TODO: Test best default
+		// Default to 10 second timeout
+		b.timeoutSeconds = 10
+	}
+
+	conn, serverVersion, err := b.initializeConn(connStr)
+	if err != nil {
+		return nil, err
+	}
+
+	c := newBoltConn(connStr, conn, serverVersion, b.timeoutSeconds, b.chunkSize)
+	return c, nil
+}
+
+func (b *boltDriver) initializeConn(connStr string) (net.Conn, []byte, error) {
+	conn, err := net.Dial("tcp", connStr)
 	if err != nil {
 		Logger.Println("An error occurred connecting:", err)
-		return nil, err
+		return nil, nil, err
 	}
 
-	c.conn.Write(magicPreamble)
-	c.conn.Write(supportedVersions)
+	conn.Write(magicPreamble)
+	conn.Write(supportedVersions)
 
-	_, err = c.conn.Read(c.serverVersion)
+	var serverVersion []byte
+	_, err = conn.Read(serverVersion)
 	if err != nil {
 		Logger.Println("An error occurred reading server version:", err)
-		return nil, err
+		return nil, nil, err
 	}
 
-	if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
+	if bytes.Compare(serverVersion, noVersionSupported) == 0 {
 		Logger.Println("No version supported from server")
-		return nil, fmt.Errorf("NO VERSION SUPPORTED")
+		return nil, nil, fmt.Errorf("NO VERSION SUPPORTED")
 	}
 
-	return c, nil
+	if err = encoding.NewEncoder(conn, b.chunkSize).Encode(messages.NewInitMessage(ClientID, b.credentials)); err != nil {
+		return nil, nil, err
+	}
+
+	return conn, serverVersion, nil
+}
+
+// Set the credentials for the conns made by this driver
+func (b *boltDriver) SetCredentials(credentials string) {
+	b.credentials = credentials
+}
+
+// Set the timeout for connections made using this driver
+func (b *boltDriver) SetTimeout(timeoutSeconds int) {
+	b.timeoutSeconds = timeoutSeconds
+}
+
+// Set the chunk size for requests made by this driver's conns
+func (b *boltDriver) SetChunkSize(chunkSize uint16) {
+	b.chunkSize = chunkSize
 }
 
 func init() {

@@ -18,7 +18,7 @@ func (i DiscardAllMessage) Signature() int {
 	return DiscardAllMessageSignature
 }
 
-// Fields gets the fields to encode for the struct
-func (i DiscardAllMessage) Fields() []interface{} {
+// AllFields gets the fields to encode for the struct
+func (i DiscardAllMessage) AllFields() []interface{} {
 	return []interface{}{}
 }

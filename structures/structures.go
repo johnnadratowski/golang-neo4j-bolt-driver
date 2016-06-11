@@ -8,5 +8,5 @@ type Structure interface {
 // MessageStructure represents a Neo4J message structure
 type MessageStructure interface {
 	Structure
-	Fields() []interface{}
+	AllFields() []interface{}
 }
