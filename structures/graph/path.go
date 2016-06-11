@@ -1,4 +1,4 @@
-package messages
+package graph
 
 const (
 	// PathSignature is the signature byte for a Path object
@@ -9,7 +9,7 @@ const (
 type Path struct {
 	Nodes         []Node
 	Relationships []Relationship
-	Sequence      int
+	Sequence      []int
 }
 
 // Signature gets the signature byte for the struct

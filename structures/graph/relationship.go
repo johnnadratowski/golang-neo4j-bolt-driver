@@ -1,4 +1,4 @@
-package messages
+package graph
 
 const (
 	// RelationshipSignature is the signature byte for a Relationship object

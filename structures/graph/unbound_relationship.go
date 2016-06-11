@@ -1,4 +1,4 @@
-package messages
+package graph
 
 const (
 	// UnboundRelationshipSignature is the signature byte for a UnboundRelationship object

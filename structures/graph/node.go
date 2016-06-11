@@ -1,4 +1,4 @@
-package messages
+package graph
 
 const (
 	// NodeSignature is the signature byte for a Node object
