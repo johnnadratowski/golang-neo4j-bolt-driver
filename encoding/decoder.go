@@ -291,6 +291,14 @@ func (d Decoder) decodeStruct(buffer *bytes.Buffer, size int) (interface{}, erro
 		return d.decodeIgnoredMessage(buffer)
 	case messages.SuccessMessageSignature:
 		return d.decodeSuccessMessage(buffer)
+	case messages.AckFailureMessageSignature:
+		return d.decodeAckFailureMessage(buffer)
+	case messages.DiscardAllMessageSignature:
+		return d.decodeDiscardAllMessage(buffer)
+	case messages.PullAllMessageSignature:
+		return d.decodePullAllMessage(buffer)
+	case messages.ResetMessageSignature:
+		return d.decodeResetMessage(buffer)
 	default:
 		return nil, fmt.Errorf("Unrecognized type decoding struct with signature %x", signature)
 	}
@@ -523,4 +531,20 @@ func (d Decoder) decodeSuccessMessage(buffer *bytes.Buffer) (messages.SuccessMes
 	}
 
 	return messages.NewSuccessMessage(metadata), nil
+}
+
+func (d Decoder) decodeAckFailureMessage(buffer *bytes.Buffer) (messages.AckFailureMessage, error) {
+	return messages.NewAckFailureMessage(), nil
+}
+
+func (d Decoder) decodeDiscardAllMessage(buffer *bytes.Buffer) (messages.DiscardAllMessage, error) {
+	return messages.NewDiscardAllMessage(), nil
+}
+
+func (d Decoder) decodePullAllMessage(buffer *bytes.Buffer) (messages.PullAllMessage, error) {
+	return messages.NewPullAllMessage(), nil
+}
+
+func (d Decoder) decodeResetMessage(buffer *bytes.Buffer) (messages.ResetMessage, error) {
+	return messages.NewResetMessage(), nil
 }

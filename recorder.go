@@ -1,8 +1,10 @@
 package golangNeo4jBoltDriver
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"net"
 	"os"
 	"time"
@@ -125,6 +127,14 @@ func (r *recorder) print() {
 		}
 		fmt.Printf("%s @ %d:\n\n", typee, event.timestamp)
 
+		decoded, err := encoding.NewDecoder(bytes.NewBuffer(event.event)).Decode()
+		if err != nil {
+			fmt.Printf("Error decoding data! Error: %s\n", err)
+		} else {
+			fmt.Printf("Decoded Data:\n\n%+v\n\n", decoded)
+		}
+
+		fmt.Print("Encoded Bytes:\n\n")
 		output := "\t"
 		for i, b := range event.event {
 			if i+1%16 == 0 {
@@ -134,7 +144,6 @@ func (r *recorder) print() {
 			}
 			output += fmt.Sprintf("%x ", b)
 		}
-
 		if !event.completed {
 			fmt.Println("EVENT NEVER COMPLETED!!!!!!!!!!!!!!!")
 		}
