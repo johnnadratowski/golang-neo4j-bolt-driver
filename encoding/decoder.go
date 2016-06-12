@@ -19,15 +19,15 @@ import (
 // map[string]interface{} and []interface{} are supported.
 // The interface for maps and slices may be more permissive in the future.
 type Decoder struct {
-	reader io.Reader
-	buf    *bytes.Buffer
+	r   io.Reader
+	buf *bytes.Buffer
 }
 
 // NewDecoder Creates a new Decoder object
 func NewDecoder(r io.Reader) Decoder {
 	return Decoder{
-		reader: r,
-		buf:    &bytes.Buffer{},
+		r:   r,
+		buf: &bytes.Buffer{},
 	}
 }
 
@@ -43,7 +43,7 @@ func (d Decoder) read(p []byte) (int, error) {
 	for {
 		// First read enough to get the chunk header
 		if d.buf.Len() < 2 {
-			numRead, err := d.buf.ReadFrom(d.reader)
+			numRead, err := d.buf.ReadFrom(d.r)
 			if err != nil {
 				// TODO: Should probably not downcast
 				return int(numRead), err
@@ -65,7 +65,7 @@ func (d Decoder) read(p []byte) (int, error) {
 
 		// Read from the chunk until we get the desired message length
 		for d.buf.Len() < int(messageLen) {
-			_, err := d.buf.ReadFrom(d.reader)
+			_, err := d.buf.ReadFrom(d.r)
 			if err != nil {
 				return 0, err
 			}

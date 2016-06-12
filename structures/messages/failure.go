@@ -7,13 +7,13 @@ const (
 
 // FailureMessage Represents an FAILURE message
 type FailureMessage struct {
-	metadata map[string]interface{}
+	Metadata map[string]interface{}
 }
 
 // NewFailureMessage Gets a new FailureMessage struct
 func NewFailureMessage(metadata map[string]interface{}) FailureMessage {
 	return FailureMessage{
-		metadata: metadata,
+		Metadata: metadata,
 	}
 }
 
@@ -24,5 +24,5 @@ func (i FailureMessage) Signature() int {
 
 // AllFields gets the fields to encode for the struct
 func (i FailureMessage) AllFields() []interface{} {
-	return []interface{}{i.metadata}
+	return []interface{}{i.Metadata}
 }

@@ -80,7 +80,7 @@ var (
 // map[string]interface{} and []interface{} are supported.
 // The interface for maps and slices may be more permissive in the future.
 type Encoder struct {
-	writer    io.Writer
+	w         io.Writer
 	buf       *bytes.Buffer
 	chunkSize uint16
 }
@@ -88,7 +88,7 @@ type Encoder struct {
 // NewEncoder Creates a new Encoder object
 func NewEncoder(w io.Writer, chunkSize uint16) Encoder {
 	return Encoder{
-		writer:    w,
+		w:         w,
 		buf:       &bytes.Buffer{},
 		chunkSize: chunkSize,
 	}
@@ -100,11 +100,11 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 	// TODO: Reset on Error? Close on error?
 	length := e.buf.Len()
 	if length >= int(e.chunkSize) {
-		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
+		if err := binary.Write(e.w, binary.BigEndian, length); err != nil {
 			return 0, err
 		}
 
-		numWritten, err := e.buf.WriteTo(e.writer)
+		numWritten, err := e.buf.WriteTo(e.w)
 		// TODO: Probably shouldn't downcast here
 		return int(numWritten), err
 	}
@@ -116,16 +116,17 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 func (e Encoder) flush() error {
 	length := e.buf.Len()
 	if length > 0 {
-		if err := binary.Write(e.writer, binary.BigEndian, length); err != nil {
+		if err := binary.Write(e.w, binary.BigEndian, length); err != nil {
 			return err
 		}
 
-		if _, err := e.buf.WriteTo(e.writer); err != nil {
+		if _, err := e.buf.WriteTo(e.w); err != nil {
 			return err
 		}
 	}
 
-	e.writer.Write(EndMessage)
+	e.w.Write(EndMessage)
+	e.buf.Reset()
 
 	return nil
 }
