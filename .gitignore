@@ -56,3 +56,5 @@ tags
 # Visual Studio code
 .vscode/
 
+# Recording for tests/debugging
+/recordings/

@@ -7,10 +7,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 	"net/url"
 	"strings"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Conn represents a connection to Neo4J
@@ -31,6 +32,7 @@ type boltConn struct {
 	initialized   bool
 	timeout       time.Duration
 	chunkSize     uint16
+	recorder      *recorder
 }
 
 // newBoltConn Creates a new bolt connection
@@ -100,16 +102,40 @@ func newBoltConn(connStr string) (*boltConn, error) {
 func (c *boltConn) Read(b []byte) (n int, err error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
+	} else if c.recorder != nil {
+		return c.recorder.Read(b)
+	} else {
+		return c.conn.Read(b)
 	}
-	return c.conn.Read(b)
 }
 
 // Write writes the data to the underlying connection
 func (c *boltConn) Write(b []byte) (n int, err error) {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
+	} else if c.recorder != nil {
+		return c.recorder.Write(b)
+	} else {
+		return c.conn.Write(b)
 	}
-	return c.conn.Write(b)
+}
+
+// Close closes the connection
+// Driver may allow for pooling in the future, keeping connections alive
+func (c *boltConn) Close() error {
+	// TODO: Connection Pooling?
+	var err error
+	if c.recorder != nil {
+		err = c.recorder.Close()
+	} else {
+		err = c.conn.Close()
+	}
+
+	if err != nil {
+		Logger.Print("An error occurred closing the connection", err)
+		return err
+	}
+	return nil
 }
 
 // Prepare prepares a new statement for a query
@@ -124,18 +150,6 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 	return nil, nil
 }
 
-// Close closes the connection
-// Driver may allow for pooling in the future, keeping connections alive
-func (c *boltConn) Close() error {
-	// TODO: Connection Pooling?
-	err := c.conn.Close()
-	if err != nil {
-		Logger.Print("An error occurred closing the connection", err)
-		return err
-	}
-	return nil
-}
-
 // Sets the size of the chunks to write to the stream
 func (c *boltConn) SetChunkSize(chunkSize uint16) {
 	c.chunkSize = chunkSize
@@ -144,4 +158,8 @@ func (c *boltConn) SetChunkSize(chunkSize uint16) {
 // Sets the timeout for reading and writing to the stream
 func (c *boltConn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
+}
+
+func (c *boltConn) record(name string) {
+	c.recorder = &recorder{conn: c.conn, name: name, events: []*event{}}
 }

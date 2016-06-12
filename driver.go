@@ -11,6 +11,7 @@ import (
 var (
 	// Logger is the logger to use for the driver. Defaults to discarding logs.
 	Logger            = log.New(ioutil.Discard, "", log.LstdFlags)
+	connLogger        = log.New(ioutil.Discard, "", log.LstdFlags)
 	magicPreamble     = []byte{0x60, 0x60, 0xb0, 0x17}
 	supportedVersions = []byte{
 		0x00, 0x00, 0x00, 0x01,
