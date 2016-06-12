@@ -36,7 +36,7 @@ type Driver interface {
 	Open(string) (driver.Conn, error)
 }
 
-type boltDriver struct {}
+type boltDriver struct{}
 
 // NewDriver creates a new Driver object
 func NewDriver() Driver {
