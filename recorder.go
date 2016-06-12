@@ -28,9 +28,8 @@ func (r *recorder) completedLast() bool {
 func (r *recorder) lastEvent() *event {
 	if len(r.events) > 0 {
 		return r.events[len(r.events)-1]
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // Read from the net conn, recording the interaction
