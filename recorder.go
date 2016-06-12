@@ -11,7 +11,7 @@ import (
 )
 
 type recorder struct {
-	conn   net.Conn
+	net.Conn
 	name   string
 	events []*event
 }
@@ -34,7 +34,7 @@ func (r *recorder) lastEvent() *event {
 
 // Read from the net conn, recording the interaction
 func (r *recorder) Read(b []byte) (n int, err error) {
-	numRead, err := r.conn.Read(b)
+	numRead, err := r.Conn.Read(b)
 	if numRead > 0 {
 		r.record(b[:numRead], false)
 	}
@@ -54,12 +54,12 @@ func (r *recorder) Close() error {
 		return err
 	}
 
-	return r.conn.Close()
+	return r.Conn.Close()
 }
 
 // Write to the net conn, recording the interaction
 func (r *recorder) Write(b []byte) (n int, err error) {
-	numWritten, err := r.conn.Write(b)
+	numWritten, err := r.Conn.Write(b)
 	if numWritten > 0 {
 		r.record(b[:numWritten], true)
 	}

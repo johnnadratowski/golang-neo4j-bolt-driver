@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 
+	"io"
+
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
@@ -32,11 +34,10 @@ type boltConn struct {
 	initialized   bool
 	timeout       time.Duration
 	chunkSize     uint16
-	recorder      *recorder
 }
 
 // newBoltConn Creates a new bolt connection
-func newBoltConn(connStr string) (*boltConn, error) {
+func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 	url, err := url.Parse(connStr)
 	if err != nil {
 		return nil, err
@@ -44,11 +45,15 @@ func newBoltConn(connStr string) (*boltConn, error) {
 		return nil, fmt.Errorf("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
 
+	authToken := ""
+	if url.User != nil {
+		authToken = url.User.Username()
+	}
 	// TODO: TLS Support
 	c := &boltConn{
 		connStr:   connStr,
 		url:       url,
-		authToken: url.User.Username(),
+		authToken: authToken,
 		// TODO: Test best default
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
@@ -57,32 +62,49 @@ func newBoltConn(connStr string) (*boltConn, error) {
 		chunkSize: 2048,
 	}
 
-	c.conn, err = net.Dial("tcp", "bolt://"+c.url.Host)
+	c.conn, err = net.Dial("tcp", c.url.Host)
 	if err != nil {
 		Logger.Println("An error occurred connecting:", err)
 		return nil, err
 	}
 
-	c.Write(magicPreamble)
-	c.Write(supportedVersions)
+	if recorderName != "" {
+		// If we're given a recorder name for this session, record it
+		c.conn = &recorder{Conn: c.conn, name: recorderName}
+	}
+
+	_, err = c.Write(magicPreamble)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	_, err = c.Write(supportedVersions)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
 
 	_, err = c.Read(c.serverVersion)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		Logger.Println("An error occurred reading server version:", err)
+		c.Close()
 		return nil, err
 	}
 
 	if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
 		Logger.Println("No version supported from server")
+		c.Close()
 		return nil, fmt.Errorf("NO VERSION SUPPORTED")
 	}
 
 	if err = encoding.NewEncoder(c, c.chunkSize).Encode(messages.NewInitMessage(ClientID, c.authToken)); err != nil {
+		c.Close()
 		return nil, err
 	}
 
 	respInt, err := encoding.NewDecoder(c).Decode()
 	if err != nil {
+		c.Close()
 		return nil, err
 	}
 
@@ -102,34 +124,23 @@ func newBoltConn(connStr string) (*boltConn, error) {
 func (c *boltConn) Read(b []byte) (n int, err error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
-	} else if c.recorder != nil {
-		return c.recorder.Read(b)
-	} else {
-		return c.conn.Read(b)
 	}
+	return c.conn.Read(b)
 }
 
 // Write writes the data to the underlying connection
 func (c *boltConn) Write(b []byte) (n int, err error) {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
-	} else if c.recorder != nil {
-		return c.recorder.Write(b)
-	} else {
-		return c.conn.Write(b)
 	}
+	return c.conn.Write(b)
 }
 
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
 func (c *boltConn) Close() error {
 	// TODO: Connection Pooling?
-	var err error
-	if c.recorder != nil {
-		err = c.recorder.Close()
-	} else {
-		err = c.conn.Close()
-	}
+	err := c.conn.Close()
 
 	if err != nil {
 		Logger.Print("An error occurred closing the connection", err)
@@ -161,5 +172,5 @@ func (c *boltConn) SetTimeout(timeout time.Duration) {
 }
 
 func (c *boltConn) record(name string) {
-	c.recorder = &recorder{conn: c.conn, name: name, events: []*event{}}
+	c.conn = &recorder{Conn: c.conn, name: name, events: []*event{}}
 }
