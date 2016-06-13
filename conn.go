@@ -34,13 +34,13 @@ type boltConn struct {
 	authToken     string
 	conn          net.Conn
 	serverVersion []byte
-	initialized   bool
 	timeout       time.Duration
 	chunkSize     uint16
+	closed 		bool
 }
 
 // newBoltConn Creates a new bolt connection
-func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
+func newBoltConn(connStr string) (*boltConn, error) {
 	url, err := url.Parse(connStr)
 	if err != nil {
 		return nil, err
@@ -62,15 +62,25 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
 		// TODO: Test best default
-		// Default to 2048 byte chunks
-		chunkSize:     2048,
+		// Default to 4096 byte chunks. Same as a golang bufio reader.
+		chunkSize:     4096,
 		serverVersion: make([]byte, 4),
 	}
 
+	err = c.initialize()
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (c *boltConn) initialize() error {
+	var err error
 	c.conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
 	if err != nil {
 		Logger.Println("An error occurred connecting:", err)
-		return nil, err
+		return err
 	}
 
 	numWritten, err := c.Write(magicPreamble)
@@ -80,7 +90,7 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 			Logger.Println("An error occurred writing magic preamble:", err)
 		}
 		c.Close()
-		return nil, err
+		return err
 	}
 
 	numWritten, err = c.Write(supportedVersions)
@@ -90,7 +100,7 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 			Logger.Println("An error occurred writing supported versions:", err)
 		}
 		c.Close()
-		return nil, err
+		return err
 	}
 
 	numRead, err := c.Read(c.serverVersion)
@@ -100,42 +110,37 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 			Logger.Println("An error occurred reading server version:", err)
 		}
 		c.Close()
-		return nil, err
+		return err
 	} else if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
 		Logger.Println("No version supported from server")
 		c.Close()
-		return nil, fmt.Errorf("NO VERSION SUPPORTED")
-	}
-
-	if recorderName != "" {
-		Logger.Println("Adding recorder to session")
-		// If we're given a recorder name for this session, record it
-		c.conn = &recorder{Conn: c.conn, name: recorderName}
+		return fmt.Errorf("NO VERSION SUPPORTED")
 	}
 
 	if err = encoding.NewEncoder(c, c.chunkSize).Encode(messages.NewInitMessage(ClientID, c.authToken)); err != nil {
 		Logger.Println("An error occurred reading server version:", err)
 		c.Close()
-		return nil, err
+		return err
 	}
 
 	respInt, err := encoding.NewDecoder(c).Decode()
 	if err != nil {
 		c.Close()
-		return nil, err
+		return err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		return c, nil
+		Logger.Printf("Successfully initiated Bolt connection:%+v", resp)
+		return nil
 	case messages.FailureMessage:
 		Logger.Printf("Got a failure message when initializing connection :%+v", resp)
 		c.Close()
-		return nil, fmt.Errorf("An error occurred initializing Neo4j Bolt Connection: %+v", resp.Metadata)
+		return fmt.Errorf("An error occurred initializing Neo4j Bolt Connection: %+v", resp.Metadata)
 	default:
 		Logger.Printf("Got an unrecognized message when initializing connection :%+v", resp)
 		c.Close()
-		return nil, fmt.Errorf("Unrecognized response from the server")
+		return fmt.Errorf("Unrecognized response from the server: %#v", resp)
 	}
 }
 
@@ -168,6 +173,7 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
 func (c *boltConn) Close() error {
+	c.closed = true
 	// TODO: Connection Pooling?
 	err := c.conn.Close()
 
@@ -180,11 +186,17 @@ func (c *boltConn) Close() error {
 
 // Prepare prepares a new statement for a query
 func (c *boltConn) Prepare(query string) (driver.Stmt, error) {
+	if c.closed {
+		return nil, fmt.Errorf("Connection already closed")
+	}
 	return newStmt(query, c), nil
 }
 
 // Begin begins a new transaction with the Neo4J Database
 func (c *boltConn) Begin() (driver.Tx, error) {
+	if c.closed {
+		return nil, fmt.Errorf("Connection already closed")
+	}
 	// TODO: Implement
 
 	return nil, nil
@@ -198,8 +210,4 @@ func (c *boltConn) SetChunkSize(chunkSize uint16) {
 // Sets the timeout for reading and writing to the stream
 func (c *boltConn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
-}
-
-func (c *boltConn) record(name string) {
-	c.conn = &recorder{Conn: c.conn, name: name, events: []*event{}}
 }

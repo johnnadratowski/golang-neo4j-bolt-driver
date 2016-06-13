@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// recorder records a given session with Neo4j.
+// allows for playback of sessions as well
+// TODO: This is broken and I might double-back to it or remove it
 type recorder struct {
 	net.Conn
 	name   string

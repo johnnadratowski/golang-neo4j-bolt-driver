@@ -46,7 +46,7 @@ func NewDriver() Driver {
 
 // Open opens a new Bolt connection to the Neo4J database
 func (b *boltDriver) Open(connStr string) (driver.Conn, error) {
-	return newBoltConn(connStr, "")
+	return newBoltConn(connStr)
 }
 
 func init() {
