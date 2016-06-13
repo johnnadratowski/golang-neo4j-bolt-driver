@@ -16,6 +16,10 @@ import (
 )
 
 // Conn represents a connection to Neo4J
+//
+// Conn objects, and any prepared statements/transactions within ARE NOT
+// THREAD SAFE.  If you want to use multipe go routines with these objects,
+// you should use a driver to create a new conn for each routine.
 type Conn interface {
 	Prepare(query string) (driver.Stmt, error)
 	Close() error

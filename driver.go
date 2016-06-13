@@ -27,6 +27,12 @@ var (
 )
 
 // Driver is a driver allowing connection to Neo4j
+// The driver allows you to open a new connection to Neo4j
+//
+// Driver objects should be THREAD SAFE, so you can use them
+// to open connections in multiple threads.  The connection objects
+// themselves, and any prepared statements/transactions within ARE NOT
+// THREAD SAFE.
 type Driver interface {
 	Open(string) (driver.Conn, error)
 }

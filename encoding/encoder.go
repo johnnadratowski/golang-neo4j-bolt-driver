@@ -399,7 +399,6 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 
 // encodeMessageStructure encodes a nil object to the stream
 func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
-	e.Write([]byte{byte(val.Signature())})
 
 	fields := val.AllFields()
 	length := len(fields)
@@ -420,6 +419,8 @@ func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
 		// TODO: Can this happen? Does go have a limit on the length?
 		return fmt.Errorf("Structure too long to write: %+v", val)
 	}
+
+	e.Write([]byte{byte(val.Signature())})
 
 	for _, field := range fields {
 		if err := e.encode(field); err != nil {
