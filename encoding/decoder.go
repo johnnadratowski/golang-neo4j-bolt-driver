@@ -32,7 +32,7 @@ func NewDecoder(r io.Reader) Decoder {
 }
 
 // Read out the object bytes to decode
-func (d Decoder) read(p []byte) (int, error) {
+func (d Decoder) read() (*bytes.Buffer, error) {
 	// TODO: Reset on Error? Close on error?
 
 	// TODO: This implementation currently reads all the chunks
@@ -42,52 +42,35 @@ func (d Decoder) read(p []byte) (int, error) {
 	// JUST A THOUGHT! :-)
 	output := &bytes.Buffer{}
 	for {
-		// First read enough to get the chunk header
-		if d.buf.Len() < 2 {
-			numRead, err := d.buf.ReadFrom(d.r)
-			if err != nil && err != io.EOF {
-				// TODO: Should probably not downcast
-				return int(numRead), err
-			} else if d.buf.Len() < 2 {
-				continue
-			}
+		lengthBytes := make([]byte, 2)
+		if numRead, err := d.r.Read(lengthBytes); numRead != 2 {
+			return nil, fmt.Errorf("Couldn't read expected bytes for message length. Read: %d Expected: 2.  Error: %s", numRead, err)
 		}
 
 		// Chunk header contains length of current message
-		messageLenBytes := d.buf.Next(2)
-		messageLen := binary.BigEndian.Uint16(messageLenBytes)
+		messageLen := binary.BigEndian.Uint16(lengthBytes)
 		if messageLen == 0 {
-			if d.buf.Len() > 0 {
-				return 0, fmt.Errorf("Data left in read buffer!")
-			}
 			// If the length is 0, the chunk is done.
-			return output.Read(p)
-
+			return output, nil
 		}
 
-		// Read from the chunk until we get the desired message length
-		for d.buf.Len() < int(messageLen) {
-			_, err := d.buf.ReadFrom(d.r)
-			if err != nil {
-				return 0, err
-			}
+		data := make([]byte, messageLen)
+		if numRead, err := d.r.Read(data); numRead != int(messageLen) {
+			return nil, fmt.Errorf("Couldn't read expected bytes for message. Read: %d Expected: %d.  Error: %s", numRead, messageLen, err)
 		}
 
-		// Store message part into buffer
-		output.Write(d.buf.Next(int(messageLen)))
+		output.Write(data)
 	}
 }
 
 // Decode decodes the stream to an object
 func (d Decoder) Decode() (interface{}, error) {
-	data := []byte{}
-	if _, err := d.read(data); err != nil {
+	data, err := d.read()
+	if err != nil {
 		return nil, err
 	}
 
-	buffer := bytes.NewBuffer(data)
-
-	return d.decode(buffer)
+	return d.decode(data)
 }
 
 func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
