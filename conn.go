@@ -10,10 +10,9 @@ import (
 	"net/url"
 	"strings"
 
-	"io"
-
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"io"
 )
 
 // Conn represents a connection to Neo4J
@@ -49,6 +48,7 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 	if url.User != nil {
 		authToken = url.User.Username()
 	}
+
 	// TODO: TLS Support
 	c := &boltConn{
 		connStr:   connStr,
@@ -59,45 +59,58 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 		timeout: time.Second * time.Duration(10),
 		// TODO: Test best default
 		// Default to 2048 byte chunks
-		chunkSize: 2048,
+		chunkSize:     2048,
+		serverVersion: make([]byte, 4),
 	}
 
-	c.conn, err = net.Dial("tcp", c.url.Host)
+	c.conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
 	if err != nil {
 		Logger.Println("An error occurred connecting:", err)
 		return nil, err
 	}
 
-	if recorderName != "" {
-		// If we're given a recorder name for this session, record it
-		c.conn = &recorder{Conn: c.conn, name: recorderName}
-	}
-
-	_, err = c.Write(magicPreamble)
-	if err != nil {
-		c.Close()
-		return nil, err
-	}
-	_, err = c.Write(supportedVersions)
-	if err != nil {
+	numWritten, err := c.Write(magicPreamble)
+	if numWritten != 4 {
+		Logger.Printf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 4", numWritten)
+		if err != nil {
+			Logger.Println("An error occurred writing magic preamble:", err)
+		}
 		c.Close()
 		return nil, err
 	}
 
-	_, err = c.Read(c.serverVersion)
-	if err != nil && err != io.EOF {
-		Logger.Println("An error occurred reading server version:", err)
+	numWritten, err = c.Write(supportedVersions)
+	if numWritten != 16 {
+		Logger.Printf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 16", numWritten)
+		if err != nil {
+			Logger.Println("An error occurred writing supported versions:", err)
+		}
 		c.Close()
 		return nil, err
 	}
 
-	if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
+	numRead, err := c.Read(c.serverVersion)
+	if numRead != 4 {
+		Logger.Printf("Could not read server version response. Read %d bytes. Expected 4 bytes. Output: %s", numRead, c.serverVersion)
+		if err != nil {
+			Logger.Println("An error occurred reading server version:", err)
+		}
+		c.Close()
+		return nil, err
+	} else if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
 		Logger.Println("No version supported from server")
 		c.Close()
 		return nil, fmt.Errorf("NO VERSION SUPPORTED")
 	}
 
+	if recorderName != "" {
+		Logger.Println("Adding recorder to session")
+		// If we're given a recorder name for this session, record it
+		c.conn = &recorder{Conn: c.conn, name: recorderName}
+	}
+
 	if err = encoding.NewEncoder(c, c.chunkSize).Encode(messages.NewInitMessage(ClientID, c.authToken)); err != nil {
+		Logger.Println("An error occurred reading server version:", err)
 		c.Close()
 		return nil, err
 	}
@@ -112,9 +125,11 @@ func newBoltConn(connStr string, recorderName string) (*boltConn, error) {
 	case messages.SuccessMessage:
 		return c, nil
 	case messages.FailureMessage:
+		Logger.Printf("Got a failure message when initializing connection :%+v", resp)
 		c.Close()
 		return nil, fmt.Errorf("An error occurred initializing Neo4j Bolt Connection: %+v", resp.Metadata)
 	default:
+		Logger.Printf("Got an unrecognized message when initializing connection :%+v", resp)
 		c.Close()
 		return nil, fmt.Errorf("Unrecognized response from the server")
 	}
@@ -125,7 +140,12 @@ func (c *boltConn) Read(b []byte) (n int, err error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
 	}
-	return c.conn.Read(b)
+	n, err = c.conn.Read(b)
+	TraceLogger.Printf("Read %d bytes from stream:\n\n%s\n", n, SprintByteHex(b))
+	if err != nil && err != io.EOF {
+		Logger.Println("An error occurred reading from stream: ", err)
+	}
+	return n, err
 }
 
 // Write writes the data to the underlying connection
@@ -133,7 +153,12 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
 		return 0, err
 	}
-	return c.conn.Write(b)
+	n, err = c.conn.Write(b)
+	TraceLogger.Printf("Wrote %d of %d bytes to stream:\n\n%s\n", len(b), n, SprintByteHex(b[:n]))
+	if err != nil {
+		Logger.Println("An error occurred writing to stream: ", err)
+	}
+	return n, err
 }
 
 // Close closes the connection

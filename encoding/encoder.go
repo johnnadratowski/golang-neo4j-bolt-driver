@@ -116,7 +116,7 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 func (e Encoder) flush() error {
 	length := e.buf.Len()
 	if length > 0 {
-		if err := binary.Write(e.w, binary.BigEndian, length); err != nil {
+		if err := binary.Write(e.w, binary.BigEndian, uint16(length)); err != nil {
 			return err
 		}
 
@@ -134,8 +134,17 @@ func (e Encoder) flush() error {
 // Encode encodes an object to the stream
 func (e Encoder) Encode(iVal interface{}) error {
 
-	// Whatever is left in the buffer for the chunk, write it out
-	defer e.flush()
+	err := e.encode(iVal)
+	if err != nil {
+		return err
+	}
+
+	// Whatever is left in the buffer for the chunk at the end, write it out
+	return e.flush()
+}
+
+// Encode encodes an object to the stream
+func (e Encoder) encode(iVal interface{}) error {
 
 	// TODO: How to handle pointers?
 	//if reflect.TypeOf(iVal) == reflect.Ptr {
@@ -342,7 +351,7 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 
 	// Encode Slice values
 	for _, item := range val {
-		if err := e.Encode(item); err != nil {
+		if err := e.encode(item); err != nil {
 			return err
 		}
 	}
@@ -377,10 +386,10 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 
 	// Encode Map values
 	for k, v := range val {
-		if err := e.Encode(k); err != nil {
+		if err := e.encode(k); err != nil {
 			return err
 		}
-		if err := e.Encode(v); err != nil {
+		if err := e.encode(v); err != nil {
 			return err
 		}
 	}
@@ -413,7 +422,7 @@ func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
 	}
 
 	for _, field := range fields {
-		if err := e.Encode(field); err != nil {
+		if err := e.encode(field); err != nil {
 			return err
 		}
 	}

@@ -49,10 +49,11 @@ func (r *recorder) Read(b []byte) (n int, err error) {
 // Close the net conn, outputting the recording
 func (r *recorder) Close() error {
 	r.print()
-	err := r.flush()
-	if err != nil {
-		return err
-	}
+	// TODO: flushing session information
+	//err := r.flush()
+	//if err != nil {
+	//	return err
+	//}
 
 	return r.Conn.Close()
 }
@@ -134,15 +135,7 @@ func (r *recorder) print() {
 		}
 
 		fmt.Print("Encoded Bytes:\n\n")
-		output := "\t"
-		for i, b := range event.event {
-			if i+1%16 == 0 {
-				output += "\n\n"
-			} else if i+1%4 == 0 {
-				output += "\t"
-			}
-			output += fmt.Sprintf("%x ", b)
-		}
+		fmt.Print(SprintByteHex(event.event))
 		if !event.completed {
 			fmt.Println("EVENT NEVER COMPLETED!!!!!!!!!!!!!!!")
 		}

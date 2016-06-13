@@ -38,13 +38,14 @@ func (d Decoder) read(p []byte) (int, error) {
 	// TODO: This implementation currently reads all the chunks
 	// right away.  Could make this so that it starts
 	// processing the first chunk, then re-enters this
-	// function to get the next chunk until the end is reached
+	// function to get the next chunk until the end is reached.
+	// JUST A THOUGHT! :-)
 	output := &bytes.Buffer{}
 	for {
 		// First read enough to get the chunk header
 		if d.buf.Len() < 2 {
 			numRead, err := d.buf.ReadFrom(d.r)
-			if err != nil {
+			if err != nil && err != io.EOF {
 				// TODO: Should probably not downcast
 				return int(numRead), err
 			} else if d.buf.Len() < 2 {
@@ -53,7 +54,8 @@ func (d Decoder) read(p []byte) (int, error) {
 		}
 
 		// Chunk header contains length of current message
-		messageLen := uint16(binary.BigEndian.Uint64(d.buf.Next(2)))
+		messageLenBytes := d.buf.Next(2)
+		messageLen := binary.BigEndian.Uint16(messageLenBytes)
 		if messageLen == 0 {
 			if d.buf.Len() > 0 {
 				return 0, fmt.Errorf("Data left in read buffer!")
@@ -78,7 +80,7 @@ func (d Decoder) read(p []byte) (int, error) {
 
 // Decode decodes the stream to an object
 func (d Decoder) Decode() (interface{}, error) {
-	var data []byte
+	data := []byte{}
 	if _, err := d.read(data); err != nil {
 		return nil, err
 	}
