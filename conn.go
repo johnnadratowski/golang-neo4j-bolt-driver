@@ -36,7 +36,7 @@ type boltConn struct {
 	serverVersion []byte
 	timeout       time.Duration
 	chunkSize     uint16
-	closed 		bool
+	closed        bool
 }
 
 // newBoltConn Creates a new bolt connection
