@@ -39,17 +39,18 @@ func newRows(metadata map[string]interface{}) *boltRows {
 
 // Columns returns the columns from the result
 func (r *boltRows) Columns() []string {
-	var fields []string
-	if fieldsInt, ok := r.metadata["fields"]; !ok {
+	fieldsInt, ok := r.metadata["fields"]
+	if !ok {
 		return []string{}
-	} else {
-		if fields, ok = fieldsInt.([]string); !ok {
-			Logger.Printf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
-			return []string{}
-		} else {
-			return fields
-		}
 	}
+
+	fields, ok := fieldsInt.([]string)
+	if !ok {
+		Logger.Printf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
+		return []string{}
+	}
+
+	return fields
 }
 
 // Close closes the rows

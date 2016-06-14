@@ -30,7 +30,7 @@ func (t *boltTx) Commit() error {
 		return fmt.Errorf("Transaction already closed")
 	}
 
-	var err error = nil
+	var err error
 	runMessage := messages.NewRunMessage("COMMIT", map[string]interface{}{})
 	if err := encoding.NewEncoder(t.conn, t.conn.chunkSize).Encode(runMessage); err != nil {
 		Logger.Printf("An error occurred committing transaction: %s", err)
@@ -70,7 +70,7 @@ func (t *boltTx) Rollback() error {
 		return fmt.Errorf("Transaction already closed")
 	}
 
-	var err error = nil
+	var err error
 	runMessage := messages.NewRunMessage("ROLLBACK", map[string]interface{}{})
 	if err := encoding.NewEncoder(t.conn, t.conn.chunkSize).Encode(runMessage); err != nil {
 		Logger.Printf("An error occurred rollback transaction: %s", err)
