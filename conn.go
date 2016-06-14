@@ -61,7 +61,7 @@ func newBoltConn(connStr string) (*boltConn, error) {
 		// TODO: Test best default
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
-		// TODO: Test best default
+		// TODO: Test best default. Try math.MaxUint16
 		// Default to 4096 byte chunks. Same as a golang bufio reader.
 		chunkSize:     4096,
 		serverVersion: make([]byte, 4),
@@ -117,7 +117,8 @@ func (c *boltConn) initialize() error {
 		return fmt.Errorf("NO VERSION SUPPORTED")
 	}
 
-	if err = encoding.NewEncoder(c, c.chunkSize).Encode(messages.NewInitMessage(ClientID, c.authToken)); err != nil {
+	initMessage := messages.NewInitMessage(ClientID, c.authToken)
+	if err = encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
 		Logger.Println("An error occurred reading server version:", err)
 		c.Close()
 		return err

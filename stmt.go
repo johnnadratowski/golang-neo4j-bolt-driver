@@ -15,11 +15,11 @@ type Stmt interface {
 
 type boltStmt struct {
 	query  string
-	conn   Conn
+	conn   *boltConn
 	closed bool
 }
 
-func newStmt(query string, conn Conn) Stmt {
+func newStmt(query string, conn *boltConn) Stmt {
 	return &boltStmt{query: query, conn: conn}
 }
 
@@ -51,7 +51,8 @@ func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
 		return nil, fmt.Errorf("Neo4j Bolt statement already closed")
 	}
 
-	// TODO: Implement
+	//runMessage := messages.NewRunMessage()
+	//err := encoding.NewEncoder(s.conn, s.conn.chunkSize).Encode()
 
 	return nil, nil
 }

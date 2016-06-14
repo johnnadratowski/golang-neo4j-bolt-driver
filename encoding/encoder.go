@@ -226,55 +226,56 @@ func (e Encoder) encodeBool(val bool) error {
 func (e Encoder) encodeInt(val int64) error {
 	var err error
 	switch {
-	case val >= -9223372036854775808 && val <= -2147483649:
+	case val >= math.MinInt64 && val < math.MinInt32:
 		// Write as INT_64
 		if _, err = e.Write([]byte{Int64Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, val)
-	case val >= -2147483648 && val <= -32769:
+	case val >= math.MinInt32 && val < math.MinInt16:
 		// Write as INT_32
 		if _, err = e.Write([]byte{Int32Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, int32(val))
-	case val >= -32768 && val <= -129:
+	case val >= math.MinInt16 && val < math.MinInt8:
 		// Write as INT_16
 		if _, err = e.Write([]byte{Int16Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, int16(val))
-	case val >= -128 && val <= -17:
+	case val >= math.MinInt8 && val < -16:
 		// Write as INT_8
 		if _, err = e.Write([]byte{Int8Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, int8(val))
-	case val >= -16 && val <= 127:
+	case val >= -16 && val <= math.MaxInt8:
 		// Write as TINY_INT
 		err = binary.Write(e, binary.BigEndian, int8(val))
-	case val >= 128 && val <= 32767:
+	case val > math.MaxInt8 && val <= math.MaxInt16:
 		// Write as INT_16
 		if _, err = e.Write([]byte{Int16Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, int16(val))
-	case val >= 32768 && val <= 2147483647:
+	case val > math.MaxInt16 && val <= math.MaxInt32:
 		// Write as INT_32
 		if _, err = e.Write([]byte{Int32Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, int32(val))
-	case val >= 2147483648 && val <= 9223372036854775807:
+	case val > math.MaxInt32 && val <= math.MaxInt64:
 		// Write as INT_64
 		if _, err = e.Write([]byte{Int64Marker}); err != nil {
 			return err
 		}
 		err = binary.Write(e, binary.BigEndian, val)
 	default:
-		// Can't happen, but if I change the implementation for uint64
+		// TODO: Should handle uint64? Can bolt handle that?
+		// The highest number from the docs is int64 max
 		// I want to catch the case if I missed it
-		return fmt.Errorf("String too long to write: %d", val)
+		return fmt.Errorf("Int too long to write: %d", val)
 	}
 	return err
 }
@@ -300,17 +301,17 @@ func (e Encoder) encodeString(val string) error {
 			return err
 		}
 		_, err = e.Write(bytes)
-	case length >= 16 && length <= 255:
+	case length > 15 && length <= math.MaxUint8:
 		if _, err := e.Write([]byte{String8Marker, byte(length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
-	case length >= 256 && length <= 65535:
+	case length > math.MaxUint8 && length <= math.MaxUint16:
 		if _, err := e.Write([]byte{String16Marker, byte(length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
-	case length >= 65536 && length <= 4294967295:
+	case length >= math.MaxUint16 && length <= math.MaxUint32:
 		if _, err := e.Write([]byte{String32Marker, byte(length)}); err != nil {
 			// encodeNil encodes a nil object to the stream
 			return err
@@ -332,15 +333,15 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 		if _, err := e.Write([]byte{byte(TinySliceMarker + length)}); err != nil {
 			return err
 		}
-	case length >= 16 && length <= 255:
+	case length > 15 && length <= math.MaxUint8:
 		if _, err := e.Write([]byte{Slice8Marker, byte(length)}); err != nil {
 			return err
 		}
-	case length >= 256 && length <= 65535:
+	case length > math.MaxUint8 && length <= math.MaxUint16:
 		if _, err := e.Write([]byte{Slice16Marker, byte(length)}); err != nil {
 			return err
 		}
-	case length >= 65536 && length <= 4294967295:
+	case length >= math.MaxUint16 && length <= math.MaxUint32:
 		if _, err := e.Write([]byte{Slice32Marker, byte(length)}); err != nil {
 			return err
 		}
@@ -367,15 +368,15 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 		if _, err := e.Write([]byte{byte(TinyMapMarker + length)}); err != nil {
 			return err
 		}
-	case length >= 16 && length <= 255:
+	case length > 15 && length <= math.MaxUint8:
 		if _, err := e.Write([]byte{Map8Marker, byte(length)}); err != nil {
 			return err
 		}
-	case length >= 256 && length <= 65535:
+	case length > math.MaxUint8 && length <= math.MaxUint16:
 		if _, err := e.Write([]byte{Map16Marker, byte(length)}); err != nil {
 			return err
 		}
-	case length >= 65536 && length <= 4294967295:
+	case length >= math.MaxUint16 && length <= math.MaxUint32:
 		if _, err := e.Write([]byte{Map32Marker, byte(length)}); err != nil {
 			return err
 		}
@@ -407,11 +408,11 @@ func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
 		if _, err := e.Write([]byte{byte(TinyStructMarker + length)}); err != nil {
 			return err
 		}
-	case length >= 16 && length <= 255:
+	case length > 15 && length <= math.MaxUint8:
 		if _, err := e.Write([]byte{Struct8Marker, byte(length)}); err != nil {
 			return err
 		}
-	case length >= 256 && length <= 65535:
+	case length > math.MaxUint8 && length <= math.MaxUint16:
 		if _, err := e.Write([]byte{Struct16Marker, byte(length)}); err != nil {
 			return err
 		}
