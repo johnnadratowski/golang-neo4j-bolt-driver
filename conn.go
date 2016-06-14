@@ -10,12 +10,18 @@ import (
 	"net/url"
 	"strings"
 
+	"io"
+	"math"
+
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
-	"io"
 )
 
 // Conn represents a connection to Neo4J
+//
+// Implements sql/driver, but also includes its own more neo-friendly interface.
+// Some of the features of this interface implement neo-specific features
+// unavailable in the sql/driver compatible interface
 //
 // Conn objects, and any prepared statements/transactions within ARE NOT
 // THREAD SAFE.  If you want to use multipe go routines with these objects,
@@ -37,13 +43,15 @@ type boltConn struct {
 	timeout       time.Duration
 	chunkSize     uint16
 	closed        bool
+	transaction   *boltTx
+	statement     *boltStmt
 }
 
 // newBoltConn Creates a new bolt connection
 func newBoltConn(connStr string) (*boltConn, error) {
 	url, err := url.Parse(connStr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("An error occurred parsing bolt URL: %s", err)
 	} else if strings.ToLower(url.Scheme) != "bolt" {
 		return nil, fmt.Errorf("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
@@ -61,15 +69,14 @@ func newBoltConn(connStr string) (*boltConn, error) {
 		// TODO: Test best default
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
-		// TODO: Test best default. Try math.MaxUint16
-		// Default to 4096 byte chunks. Same as a golang bufio reader.
-		chunkSize:     4096,
+		// TODO: Test best default.
+		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
 	}
 
 	err = c.initialize()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("An error occurred initializing connection: %s", err)
 	}
 
 	return c, nil
@@ -79,15 +86,16 @@ func (c *boltConn) initialize() error {
 	var err error
 	c.conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
 	if err != nil {
-		Logger.Println("An error occurred connecting:", err)
-		return err
+		Logger.Printf("An error occurred connecting: %s", err)
+		return fmt.Errorf("An error occurred dialing to neo4j: %s", err)
 	}
 
 	numWritten, err := c.Write(magicPreamble)
 	if numWritten != 4 {
 		Logger.Printf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 4", numWritten)
 		if err != nil {
-			Logger.Println("An error occurred writing magic preamble:", err)
+			Logger.Printf("An error occurred writing magic preamble: %s", err)
+			err = fmt.Errorf("An error occurred writing magic preamble: %s", err)
 		}
 		c.Close()
 		return err
@@ -97,7 +105,8 @@ func (c *boltConn) initialize() error {
 	if numWritten != 16 {
 		Logger.Printf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 16", numWritten)
 		if err != nil {
-			Logger.Println("An error occurred writing supported versions:", err)
+			Logger.Printf("An error occurred writing supported versions: %s", err)
+			err = fmt.Errorf("An error occurred writing supported versions: %s", err)
 		}
 		c.Close()
 		return err
@@ -107,32 +116,33 @@ func (c *boltConn) initialize() error {
 	if numRead != 4 {
 		Logger.Printf("Could not read server version response. Read %d bytes. Expected 4 bytes. Output: %s", numRead, c.serverVersion)
 		if err != nil {
-			Logger.Println("An error occurred reading server version:", err)
+			Logger.Printf("An error occurred reading server version: %s", err)
+			err = fmt.Errorf("An error occurred reading server version: %s", err)
 		}
 		c.Close()
 		return err
 	} else if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
 		Logger.Println("No version supported from server")
 		c.Close()
-		return fmt.Errorf("NO VERSION SUPPORTED")
+		return fmt.Errorf("Server responded with no supported version")
 	}
 
 	initMessage := messages.NewInitMessage(ClientID, c.authToken)
 	if err = encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
-		Logger.Println("An error occurred reading server version:", err)
+		Logger.Printf("An error occurred reading server version: %s", err)
 		c.Close()
-		return err
+		return fmt.Errorf("An error occurred reading server version: %s", err)
 	}
 
 	respInt, err := encoding.NewDecoder(c).Decode()
 	if err != nil {
 		c.Close()
-		return err
+		return fmt.Errorf("An error occurred decoding object: %s", respInt)
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Successfully initiated Bolt connection:%+v", resp)
+		Logger.Printf("Successfully initiated Bolt connection: %+v", resp)
 		return nil
 	case messages.FailureMessage:
 		Logger.Printf("Got a failure message when initializing connection :%+v", resp)
@@ -148,12 +158,13 @@ func (c *boltConn) initialize() error {
 // Read reads the data from the underlying connection
 func (c *boltConn) Read(b []byte) (n int, err error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("An error occurred setting read deadline: %s", err)
 	}
 	n, err = c.conn.Read(b)
-	TraceLogger.Printf("Read %d bytes from stream:\n\n%s\n", n, SprintByteHex(b))
+	TraceLogger.Printf("Read %d bytes from stream:\n\n%s\n", n, sprintByteHex(b))
 	if err != nil && err != io.EOF {
-		Logger.Println("An error occurred reading from stream: ", err)
+		Logger.Printf("An error occurred reading from stream: %s", err)
+		err = fmt.Errorf("An error occurred reading from stream: %s", err)
 	}
 	return n, err
 }
@@ -161,12 +172,13 @@ func (c *boltConn) Read(b []byte) (n int, err error) {
 // Write writes the data to the underlying connection
 func (c *boltConn) Write(b []byte) (n int, err error) {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("An error occurred setting write deadline: %s", err)
 	}
 	n, err = c.conn.Write(b)
-	TraceLogger.Printf("Wrote %d of %d bytes to stream:\n\n%s\n", len(b), n, SprintByteHex(b[:n]))
+	TraceLogger.Printf("Wrote %d of %d bytes to stream:\n\n%s\n", len(b), n, sprintByteHex(b[:n]))
 	if err != nil {
-		Logger.Println("An error occurred writing to stream: ", err)
+		Logger.Printf("An error occurred writing to stream: %s", err)
+		err = fmt.Errorf("An error occurred writing to stream: %s", err)
 	}
 	return n, err
 }
@@ -174,33 +186,142 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
 func (c *boltConn) Close() error {
-	c.closed = true
+	if c.closed {
+		return nil
+	}
+
+	if c.transaction != nil {
+		if err := c.transaction.Rollback(); err != nil {
+			return fmt.Errorf("Error rolling back transaction when closing connection: %s", err)
+		}
+	}
+
 	// TODO: Connection Pooling?
 	err := c.conn.Close()
-
+	c.closed = true
 	if err != nil {
-		Logger.Print("An error occurred closing the connection", err)
-		return err
+		Logger.Printf("An error occurred closing the connection %s", err)
+		return fmt.Errorf("An error occurred closing the connection: %s", err)
 	}
+
 	return nil
+}
+
+func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
+	Logger.Printf("Acknowledging Failure: %#v", failure)
+
+	// TODO: Try RESET on failures?
+
+	ack := messages.NewAckFailureMessage()
+	err := encoding.NewEncoder(c, c.chunkSize).Encode(ack)
+	if err != nil {
+		return fmt.Errorf("An error occurred encoding ack failure message: %s", err)
+	}
+
+	for {
+		respInt, err := encoding.NewDecoder(c).Decode()
+		if err != nil {
+			return fmt.Errorf("An error occurred decoding ack failure message response: %s", err)
+		}
+
+		switch resp := respInt.(type) {
+		case messages.IgnoredMessage:
+			Logger.Printf("Got ignored message when acking failure: %#v", resp)
+			continue
+		case messages.SuccessMessage:
+			Logger.Printf("Got success message when acking failure: %#v", resp)
+			return nil
+		default:
+			Logger.Printf("Got unrecognized response from acking failure: %#v", resp)
+			return fmt.Errorf("Got unrecognized response from acking failure: %#v", resp)
+		}
+	}
+}
+
+func (c *boltConn) reset() error {
+
+	reset := messages.NewResetMessage()
+	err := encoding.NewEncoder(c, c.chunkSize).Encode(reset)
+	if err != nil {
+		return fmt.Errorf("An error occurred encoding reset message: %s", err)
+	}
+
+	for {
+		respInt, err := encoding.NewDecoder(c).Decode()
+		if err != nil {
+			return fmt.Errorf("An error occurred decoding reset message response: %s", err)
+		}
+
+		switch resp := respInt.(type) {
+		case messages.IgnoredMessage:
+			Logger.Printf("Got ignored message when acking failure: %#v", resp)
+			continue
+		case messages.SuccessMessage:
+			Logger.Printf("Got success message when acking failure: %#v", resp)
+			return nil
+		default:
+			Logger.Printf("Got unrecognized response from acking failure: %#v", resp)
+			return fmt.Errorf("Got unrecognized response from acking failure: %#v", resp)
+		}
+	}
 }
 
 // Prepare prepares a new statement for a query
 func (c *boltConn) Prepare(query string) (driver.Stmt, error) {
+	return c.prepare(query)
+}
+
+// Prepare prepares a new statement for a query. Implements a Neo-friendly alternative to sql/driver.
+func (c *boltConn) PrepareNeo(query string) (Stmt, error) {
+	return c.prepare(query)
+}
+
+func (c *boltConn) prepare(query string) (Stmt, error) {
+	if c.statement != nil {
+		return nil, fmt.Errorf("An open statement already exists")
+	}
 	if c.closed {
 		return nil, fmt.Errorf("Connection already closed")
 	}
-	return newStmt(query, c), nil
+	c.statement = newStmt(query, c)
+	return c.statement, nil
 }
 
 // Begin begins a new transaction with the Neo4J Database
 func (c *boltConn) Begin() (driver.Tx, error) {
+	if c.transaction != nil {
+		return nil, fmt.Errorf("An open transaction already exists")
+	}
 	if c.closed {
 		return nil, fmt.Errorf("Connection already closed")
 	}
-	// TODO: Implement
 
-	return nil, nil
+	runMessage := messages.NewRunMessage("BEGIN", map[string]interface{}{})
+	if err := encoding.NewEncoder(c, c.chunkSize).Encode(runMessage); err != nil {
+		Logger.Printf("An error occurred beginning transaction: %s", err)
+		return nil, fmt.Errorf("An error occurred beginning transaction: %s", err)
+	}
+
+	respInt, err := encoding.NewDecoder(c).Decode()
+	if err != nil {
+		Logger.Printf("An error occurred reading beginning transaction response: %s", err)
+		return nil, fmt.Errorf("An error occurred reading beginning transaction response: %s", err)
+	}
+
+	switch resp := respInt.(type) {
+	case messages.SuccessMessage:
+		Logger.Printf("Got success message beginning transaction: %#v", resp)
+		return newTx(c), nil
+	case messages.FailureMessage:
+		Logger.Printf("Got failure message beginning transaction: %#v", resp)
+		err := c.ackFailure(resp)
+		if err != nil {
+			Logger.Printf("An error occurred acking failure: %s", err)
+		}
+		return nil, fmt.Errorf("Got failure message beginning transaction: %#v", resp)
+	default:
+		return nil, fmt.Errorf("Unrecognized response type beginning transaction: %T Value: %#v", resp, resp)
+	}
 }
 
 // Sets the size of the chunks to write to the stream

@@ -21,7 +21,7 @@ func main() {
 	fmt.Printf("MAX INT32: %d\n", math.MaxInt32)
 	fmt.Printf("MAX INT64: %d\n", math.MaxInt64)
 
-	fmt.Printf("MIN INT8: %d\n",  math.MinInt8)
+	fmt.Printf("MIN INT8: %d\n", math.MinInt8)
 	fmt.Printf("MIN INT16: %d\n", math.MinInt16)
 	fmt.Printf("MIN INT32: %d\n", math.MinInt32)
 	fmt.Printf("MIN INT64: %d\n", math.MinInt64)

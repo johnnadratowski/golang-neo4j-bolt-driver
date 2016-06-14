@@ -2,9 +2,9 @@ package golangNeo4jBoltDriver
 
 import "fmt"
 
-// SprintByteHex returns a formatted string of the byte array in hexadecimal
+// sprintByteHex returns a formatted string of the byte array in hexadecimal
 // with a nicely formatted human-readable output
-func SprintByteHex(b []byte) string {
+func sprintByteHex(b []byte) string {
 	output := "\t"
 	for i, b := range b {
 		output += fmt.Sprintf("%x", b)

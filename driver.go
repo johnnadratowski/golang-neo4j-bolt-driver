@@ -29,12 +29,17 @@ var (
 // Driver is a driver allowing connection to Neo4j
 // The driver allows you to open a new connection to Neo4j
 //
+// Implements sql/driver, but also includes its own more neo-friendly interface.
+// Some of the features of this interface implement neo-specific features
+// unavailable in the sql/driver compatible interface
+//
 // Driver objects should be THREAD SAFE, so you can use them
 // to open connections in multiple threads.  The connection objects
 // themselves, and any prepared statements/transactions within ARE NOT
 // THREAD SAFE.
 type Driver interface {
 	Open(string) (driver.Conn, error)
+	OpenNeo(string) (Conn, error)
 }
 
 type boltDriver struct{}
@@ -49,6 +54,10 @@ func (b *boltDriver) Open(connStr string) (driver.Conn, error) {
 	return newBoltConn(connStr)
 }
 
+// Open opens a new Bolt connection to the Neo4J database. Implements a Neo-friendly alternative to sql/driver.
+func (b *boltDriver) OpenNeo(connStr string) (Conn, error) {
+	return newBoltConn(connStr)
+}
 func init() {
 	sql.Register("neo4j-bolt", &boltDriver{})
 }

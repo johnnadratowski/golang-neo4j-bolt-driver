@@ -7,13 +7,13 @@ const (
 
 // SuccessMessage Represents an SUCCESS message
 type SuccessMessage struct {
-	metadata map[string]interface{}
+	Metadata map[string]interface{}
 }
 
 // NewSuccessMessage Gets a new SuccessMessage struct
 func NewSuccessMessage(metadata map[string]interface{}) SuccessMessage {
 	return SuccessMessage{
-		metadata: metadata,
+		Metadata: metadata,
 	}
 }
 
@@ -24,5 +24,5 @@ func (i SuccessMessage) Signature() int {
 
 // AllFields gets the fields to encode for the struct
 func (i SuccessMessage) AllFields() []interface{} {
-	return []interface{}{i.metadata}
+	return []interface{}{i.Metadata}
 }

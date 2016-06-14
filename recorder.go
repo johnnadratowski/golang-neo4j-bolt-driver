@@ -138,7 +138,7 @@ func (r *recorder) print() {
 		}
 
 		fmt.Print("Encoded Bytes:\n\n")
-		fmt.Print(SprintByteHex(event.event))
+		fmt.Print(sprintByteHex(event.event))
 		if !event.completed {
 			fmt.Println("EVENT NEVER COMPLETED!!!!!!!!!!!!!!!")
 		}
