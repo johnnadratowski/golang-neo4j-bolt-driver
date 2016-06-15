@@ -58,6 +58,39 @@ func (r *boltRows) Close() error {
 	if r.closed {
 		return nil
 	}
+
+	// Discard all messages if not consumed
+	if !r.consumed {
+
+		discardMessage := messages.NewDiscardAllMessage()
+		err := encoding.NewEncoder(r.statement.conn, r.statement.conn.chunkSize).Encode(discardMessage)
+		if err != nil {
+			Logger.Printf("An error occurred encoding discard all query: %s", err)
+			return fmt.Errorf("An error occurred encoding discard all query: %s", err)
+		}
+
+		respInt, err := encoding.NewDecoder(r.statement.conn).Decode()
+		if err != nil {
+			Logger.Printf("An error occurred decoding discard all query response: %s", err)
+			return fmt.Errorf("An error occurred decoding discard all query response: %s", err)
+		}
+
+		switch resp := respInt.(type) {
+		case messages.SuccessMessage:
+			Logger.Printf("Got success message: %#v", resp)
+		case messages.FailureMessage:
+			Logger.Printf("Got failure message: %#v", resp)
+			err := r.statement.conn.ackFailure(resp)
+			if err != nil {
+				Logger.Printf("An error occurred acking failure: %s", err)
+			}
+			return fmt.Errorf("Got failure message: %#v", resp)
+		default:
+			return fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+		}
+
+	}
+
 	r.closed = true
 	r.statement.rows = nil
 	return nil
