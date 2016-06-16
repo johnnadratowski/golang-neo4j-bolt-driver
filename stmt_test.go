@@ -2,8 +2,8 @@ package golangNeo4jBoltDriver
 
 import (
 	"io"
-	"testing"
 	"reflect"
+	"testing"
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {

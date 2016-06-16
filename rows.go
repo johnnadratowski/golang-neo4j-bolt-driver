@@ -43,7 +43,7 @@ type boltRows struct {
 func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
 	return &boltRows{
 		statement: statement,
-		metadata: metadata,
+		metadata:  metadata,
 	}
 }
 
