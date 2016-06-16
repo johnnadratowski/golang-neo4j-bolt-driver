@@ -49,7 +49,11 @@ func TestBoltStmt_SelectOne(t *testing.T) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-	conn.Close()
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SelectMany(t *testing.T) {
@@ -107,7 +111,11 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-	conn.Close()
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SelectIntLimits(t *testing.T) {
@@ -165,7 +173,11 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
 	}
 
-	conn.Close()
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_Exec(t *testing.T) {
@@ -238,7 +250,11 @@ func TestBoltStmt_Exec(t *testing.T) {
 		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
 	}
 
-	conn.Close()
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_InvalidArgs(t *testing.T) {
@@ -267,7 +283,11 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 		t.Fatalf("Did not recieve expected error: %s", err)
 	}
 
+
 	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_CreateArgs(t *testing.T) {
@@ -330,5 +350,97 @@ func TestBoltStmt_CreateArgs(t *testing.T) {
 		t.Fatalf("An error occurred on delete query to Neo: %s", err)
 	}
 
+
 	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}
+
+func TestBoltStmt_Discard(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`CREATE (f:FOO {a: "1"}), (b:FOO {a: "2"}) RETURN f, b`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	rows, err := stmt.QueryNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	// Closing stmt should discard stream when it wasn't yet consumed
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) RETURN f.a ORDER BY f.a`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	rows, err = stmt.QueryNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if output[0].(string) != "1" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+
+	// Closing in middle of record stream
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) RETURN f.a ORDER BY f.a`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	rows, err = stmt.QueryNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err = rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if output[0].(string) != "1" {
+		t.Fatalf("Unexpected return data: %#v", output[0])
+	}
+
+	output, _, err = rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if output[0].(string) != "2" {
+		t.Fatalf("Unexpected return data: %#v", output[0])
+	}
+
+	// Ensure we're getting proper data in subsequent queries
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) DELETE f`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	_, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }

@@ -37,15 +37,6 @@ func (t *boltTx) Commit() error {
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Successfully committed transaction: %#v", resp)
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message committing transaction: %#v", resp)
-		err = t.conn.ackFailure(resp)
-		if err != nil {
-			t.conn.Close()
-			err = fmt.Errorf("Unrecoverable failure committing transaction. Closing connection. Error: %s \nGot Failure Message: %#v.", err, resp)
-		} else {
-			err = fmt.Errorf("Got failure message committing transaction: %#v", resp)
-		}
 	default:
 		err = fmt.Errorf("Unrecognized response type committing transaction: %T Value: %#v", resp, resp)
 	}
@@ -69,15 +60,6 @@ func (t *boltTx) Rollback() error {
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Successfully rollback transaction: %#v", resp)
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message rollback transaction: %#v", resp)
-		err = t.conn.ackFailure(resp)
-		if err != nil {
-			t.conn.Close()
-			err = fmt.Errorf("Unrecoverable failure rollback transaction. Closing connection. Error: %s \nGot Failure Message: %#v.", err, resp)
-		} else {
-			err = fmt.Errorf("Got failure message rollback transaction: %#v", resp)
-		}
 	default:
 		err = fmt.Errorf("Unrecognized response type rollback transaction: %T Value: %#v", resp, resp)
 	}

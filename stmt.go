@@ -61,6 +61,24 @@ func (s *boltStmt) NumInput() int {
 	return -1 // TODO: Not sure if we should disable this
 }
 
+// args turns a driver value list into neo4j query args
+func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
+	if len(args)%2 != 0 {
+		return nil, errors.New("Must pass an even numer of arguments - key then value")
+	}
+
+	output := map[string]interface{}{}
+	for i := 0; i < len(args)-1; i++ {
+		k, ok := args[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("Only support strings for keys. Argument %d was not a string. Got: %T %#v", i, args[i], args[i])
+		}
+		output[k] = args[i+1].(interface{})
+	}
+
+	return output, nil
+}
+
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
 //
 // This implementation does not support positional arguments,  only named arguments.
@@ -90,62 +108,33 @@ func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 	respInt, err := s.conn.sendRun(s.query, params)
 	if err != nil {
 		Logger.Printf("An error occurred encoding exec query: %s", err)
-		return nil, fmt.Errorf("An error occurred encoding exec query: %s", err)
+		return nil, err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message: %#v", resp)
 
-		metadataInt, err := s.conn.sendPullAll()
+		err := s.conn.sendPullAll()
 		if err != nil {
 			return nil, err
 		}
 
-		switch metadataResp := metadataInt.(type) {
+		metaDataInt, err := s.conn.consume()
+		if err != nil {
+			return nil, err
+		}
+
+		switch metadataResp := metaDataInt.(type) {
 		case messages.SuccessMessage:
 			Logger.Printf("Got success message: %#v", metadataResp)
 			return newResult(metadataResp.Metadata), nil
-		case messages.FailureMessage:
-			Logger.Printf("Got failure message: %#v", metadataResp)
-
-			err := s.conn.ackFailure(metadataResp)
-			if err != nil {
-				Logger.Printf("An error occurred acking failure: %s", err)
-			}
-
-			return nil, fmt.Errorf("Got failure message: %#v", resp)
 		default:
 			return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", metadataResp, metadataResp)
 		}
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message: %#v", resp)
-		err := s.conn.ackFailure(resp)
-		if err != nil {
-			Logger.Printf("An error occurred acking failure: %s", err)
-		}
-		return nil, fmt.Errorf("Got failure message: %#v", resp)
 	default:
 		return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
 	}
-}
-
-// args turns a driver value list into neo4j query args
-func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
-	if len(args)%2 != 0 {
-		return nil, errors.New("Must pass an even numer of arguments - key then value")
-	}
-
-	output := map[string]interface{}{}
-	for i := 0; i < len(args)-1; i++ {
-		k, ok := args[i].(string)
-		if !ok {
-			return nil, fmt.Errorf("Only support strings for keys. Argument %d was not a string. Got: %T %#v", i, args[i], args[i])
-		}
-		output[k] = args[i+1].(interface{})
-	}
-
-	return output, nil
 }
 
 // Query executes a query that returns data. See sql/driver.Stmt.
@@ -177,7 +166,7 @@ func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
 	respInt, err := s.conn.sendRun(s.query, params)
 	if err != nil {
 		Logger.Printf("An error occurred encoding query: %s", err)
-		return nil, fmt.Errorf("An error occurred encoding query: %s", err)
+		return nil, err
 	}
 
 	switch resp := respInt.(type) {
@@ -185,13 +174,6 @@ func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
 		Logger.Printf("Got success message: %#v", resp)
 		s.rows = newRows(s, resp.Metadata)
 		return s.rows, nil
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message: %#v", resp)
-		err := s.conn.ackFailure(resp)
-		if err != nil {
-			Logger.Printf("An error occurred acking failure: %s", err)
-		}
-		return nil, fmt.Errorf("Got failure message: %#v", resp)
 	default:
 		return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
 	}

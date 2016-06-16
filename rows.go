@@ -37,6 +37,7 @@ type boltRows struct {
 	metadata  map[string]interface{}
 	statement *boltStmt
 	consumed  bool
+	finishedConsume  bool
 }
 
 func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
@@ -73,8 +74,8 @@ func (r *boltRows) Close() error {
 		return nil
 	}
 
-	// Discard all messages if not consumed
 	if !r.consumed {
+		// Discard all messages if not consumed
 
 		respInt, err := r.statement.conn.sendDiscardAll()
 		if err != nil {
@@ -85,17 +86,18 @@ func (r *boltRows) Close() error {
 		switch resp := respInt.(type) {
 		case messages.SuccessMessage:
 			Logger.Printf("Got success message: %#v", resp)
-		case messages.FailureMessage:
-			Logger.Printf("Got failure message: %#v", resp)
-			err := r.statement.conn.ackFailure(resp)
-			if err != nil {
-				Logger.Printf("An error occurred acking failure: %s", err)
-			}
-			return fmt.Errorf("Got failure message: %#v", resp)
 		default:
 			return fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
 		}
 
+	} else if !r.finishedConsume {
+		// Clear out all unconsumed messages if we
+		// never finished consuming them.
+		_, _, err := r.statement.conn.consumeAll()
+		if err != nil {
+			Logger.Printf("An error occurred clearing out unconsumed stream: %s", err)
+			return fmt.Errorf("An error occurred clearing out unconsumed stream: %s", err)
+		}
 	}
 
 	r.closed = true
@@ -109,24 +111,27 @@ func (r *boltRows) Next(dest []driver.Value) error {
 		return fmt.Errorf("Rows are already closed")
 	}
 
-	respInt, err := r.statement.conn.sendPullAll()
-	if err != nil {
-		Logger.Printf("An error occurred pulling messages on row close: %s", err)
-		return fmt.Errorf("An error occurred pulling messages on row close: %s", err)
+	if !r.consumed {
+		r.consumed = true
+		if err := r.statement.conn.sendPullAll(); err != nil {
+			Logger.Printf("An error occurred pulling messages on row close: %s", err)
+			r.finishedConsume = true
+			return err
+		}
 	}
+
+	respInt, err := r.statement.conn.consume()
+	if err != nil {
+		Logger.Printf("An error occurred consuming record: %s", err)
+		return err
+	}
+
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message: %#v", resp)
-		r.consumed = true
+		r.finishedConsume = true
 		return io.EOF
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message: %#v", resp)
-		err := r.statement.conn.ackFailure(resp)
-		if err != nil {
-			Logger.Printf("An error occurred acking failure: %s", err)
-		}
-		return fmt.Errorf("Got failure message: %#v", resp)
 	case messages.RecordMessage:
 		Logger.Printf("Got record message: %#v", resp)
 		dest = make([]driver.Value, len(resp.Fields))
@@ -148,24 +153,26 @@ func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 		return nil, nil, fmt.Errorf("Rows are already closed")
 	}
 
-	respInt, err := r.statement.conn.sendPullAll()
+	if !r.consumed {
+		r.consumed = true
+		if err := r.statement.conn.sendPullAll(); err != nil {
+			Logger.Printf("An error occurred pulling messages on row close: %s", err)
+			r.finishedConsume = true
+			return nil, nil, err
+		}
+	}
+
+	respInt, err := r.statement.conn.consume()
 	if err != nil {
-		Logger.Printf("An error occurred pulling messages on row close: %s", err)
-		return nil, nil, fmt.Errorf("An error occurred pulling messages on row close: %s", err)
+		Logger.Printf("An error occurred consuming record: %s", err)
+		return nil, nil, err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message: %#v", resp)
-		r.consumed = true
+		r.finishedConsume = true
 		return nil, resp.Metadata, io.EOF
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message: %#v", resp)
-		err := r.statement.conn.ackFailure(resp)
-		if err != nil {
-			Logger.Printf("An error occurred acking failure: %s", err)
-		}
-		return nil, nil, fmt.Errorf("Got failure message: %#v", resp)
 	case messages.RecordMessage:
 		Logger.Printf("Got record message: %#v", resp)
 		return resp.Fields, nil, nil

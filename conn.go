@@ -143,10 +143,6 @@ func (c *boltConn) initialize() error {
 	case messages.SuccessMessage:
 		Logger.Printf("Successfully initiated Bolt connection: %+v", resp)
 		return nil
-	case messages.FailureMessage:
-		Logger.Printf("Got a failure message when initializing connection :%+v", resp)
-		c.Close()
-		return fmt.Errorf("An error occurred initializing Neo4j Bolt Connection: %+v", resp.Metadata)
 	default:
 		Logger.Printf("Got an unrecognized message when initializing connection :%+v", resp)
 		c.Close()
@@ -326,13 +322,6 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message beginning transaction: %#v", resp)
 		return newTx(c), nil
-	case messages.FailureMessage:
-		Logger.Printf("Got failure message beginning transaction: %#v", resp)
-		err := c.ackFailure(resp)
-		if err != nil {
-			Logger.Printf("An error occurred acking failure: %s", err)
-		}
-		return nil, fmt.Errorf("Got failure message beginning transaction: %#v", resp)
 	default:
 		return nil, fmt.Errorf("Unrecognized response type beginning transaction: %T Value: %#v", resp, resp)
 	}
@@ -348,6 +337,46 @@ func (c *boltConn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
 }
 
+func (c *boltConn) consume() (interface{}, error) {
+	Logger.Println("Consuming response from bolt stream")
+
+	respInt, err := encoding.NewDecoder(c).Decode()
+	if err != nil {
+		return respInt, err
+	}
+
+	if failure, isFail := respInt.(messages.FailureMessage); isFail {
+		Logger.Printf("Got failure message: %#v", failure)
+		err := c.ackFailure(failure)
+		if err != nil {
+			Logger.Printf("An error occurred acking failure: %s", err)
+			return nil, err
+		}
+		return failure, fmt.Errorf("Got failure message: %#v", failure)
+	}
+	return respInt, err
+}
+
+func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
+	Logger.Println("Consuming all responses until success/failure")
+
+	responses := []interface{}{}
+	for {
+		respInt, err := c.consume()
+		if err != nil {
+			Logger.Printf("An error occurred consuming all from stream: %s", err)
+			return nil, respInt, err
+		}
+
+		if success, isSuccess := respInt.(messages.SuccessMessage); isSuccess {
+			Logger.Printf("Got success message: %#v", success)
+			return responses, success, nil
+		}
+
+		responses = append(responses, respInt)
+	}
+}
+
 func (c *boltConn) sendInit() (interface{}, error) {
 	Logger.Printf("Sending INIT Message. ClientID: %s AuthToken: %s", ClientID, c.authToken)
 
@@ -357,12 +386,7 @@ func (c *boltConn) sendInit() (interface{}, error) {
 		return nil, fmt.Errorf("An error occurred sending init message: %s", err)
 	}
 
-	respInt, err := encoding.NewDecoder(c).Decode()
-	if err != nil {
-		return nil, fmt.Errorf("An error occurred decoding object: %s", respInt)
-	}
-
-	return respInt, err
+	return c.consume()
 }
 
 func (c *boltConn) sendRun(query string, args map[string]interface{}) (interface{}, error) {
@@ -373,32 +397,20 @@ func (c *boltConn) sendRun(query string, args map[string]interface{}) (interface
 		return nil, fmt.Errorf("An error occurred running query: %s", err)
 	}
 
-	respInt, err := encoding.NewDecoder(c).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred reading run query response: %s", err)
-		return nil, fmt.Errorf("An error occurred reading run query response: %s", err)
-	}
-
-	return respInt, nil
+	return c.consume()
 }
 
-func (c *boltConn) sendPullAll() (interface{}, error) {
+func (c *boltConn) sendPullAll() (error) {
 	Logger.Println("Sending PULL_ALL message")
 
 	pullAllMessage := messages.NewPullAllMessage()
 	err := encoding.NewEncoder(c, c.chunkSize).Encode(pullAllMessage)
 	if err != nil {
 		Logger.Printf("An error occurred encoding pull all query: %s", err)
-		return nil, fmt.Errorf("An error occurred encoding pull all query: %s", err)
+		return fmt.Errorf("An error occurred encoding pull all query: %s", err)
 	}
 
-	respInt, err := encoding.NewDecoder(c).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred decoding pull all query response: %s", err)
-		return nil, fmt.Errorf("An error occurred decoding pull all query response: %s", err)
-	}
-
-	return respInt, nil
+	return nil
 }
 
 func (c *boltConn) sendDiscardAll() (interface{}, error) {
@@ -411,11 +423,5 @@ func (c *boltConn) sendDiscardAll() (interface{}, error) {
 		return nil, fmt.Errorf("An error occurred encoding discard all query: %s", err)
 	}
 
-	respInt, err := encoding.NewDecoder(c).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred decoding discard all query response: %s", err)
-		return nil, fmt.Errorf("An error occurred decoding discard all query response: %s", err)
-	}
-
-	return respInt, nil
+	return c.consume()
 }
