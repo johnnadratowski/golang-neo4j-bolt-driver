@@ -49,7 +49,6 @@ func TestBoltStmt_SelectOne(t *testing.T) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-
 	err = conn.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
@@ -111,7 +110,6 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-
 	err = conn.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
@@ -172,7 +170,6 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 	if err != io.EOF {
 		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
 	}
-
 
 	err = conn.Close()
 	if err != nil {
@@ -250,7 +247,6 @@ func TestBoltStmt_Exec(t *testing.T) {
 		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
 	}
 
-
 	err = conn.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
@@ -282,7 +278,6 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 	if strings.Index(err.Error(), expected) == -1 {
 		t.Fatalf("Did not recieve expected error: %s", err)
 	}
-
 
 	err = conn.Close()
 	if err != nil {
@@ -349,7 +344,6 @@ func TestBoltStmt_CreateArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("An error occurred on delete query to Neo: %s", err)
 	}
-
 
 	err = conn.Close()
 	if err != nil {

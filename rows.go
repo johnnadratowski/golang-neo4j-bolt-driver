@@ -33,11 +33,11 @@ type Rows interface {
 }
 
 type boltRows struct {
-	closed    bool
-	metadata  map[string]interface{}
-	statement *boltStmt
-	consumed  bool
-	finishedConsume  bool
+	closed          bool
+	metadata        map[string]interface{}
+	statement       *boltStmt
+	consumed        bool
+	finishedConsume bool
 }
 
 func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
@@ -125,7 +125,6 @@ func (r *boltRows) Next(dest []driver.Value) error {
 		Logger.Printf("An error occurred consuming record: %s", err)
 		return err
 	}
-
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:

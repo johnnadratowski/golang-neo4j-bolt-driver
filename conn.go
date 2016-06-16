@@ -400,7 +400,7 @@ func (c *boltConn) sendRun(query string, args map[string]interface{}) (interface
 	return c.consume()
 }
 
-func (c *boltConn) sendPullAll() (error) {
+func (c *boltConn) sendPullAll() error {
 	Logger.Println("Sending PULL_ALL message")
 
 	pullAllMessage := messages.NewPullAllMessage()
