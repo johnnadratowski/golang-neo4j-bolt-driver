@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -77,17 +76,10 @@ func (r *boltRows) Close() error {
 	// Discard all messages if not consumed
 	if !r.consumed {
 
-		discardMessage := messages.NewDiscardAllMessage()
-		err := encoding.NewEncoder(r.statement.conn, r.statement.conn.chunkSize).Encode(discardMessage)
+		respInt, err := r.statement.conn.sendDiscardAll()
 		if err != nil {
-			Logger.Printf("An error occurred encoding discard all query: %s", err)
-			return fmt.Errorf("An error occurred encoding discard all query: %s", err)
-		}
-
-		respInt, err := encoding.NewDecoder(r.statement.conn).Decode()
-		if err != nil {
-			Logger.Printf("An error occurred decoding discard all query response: %s", err)
-			return fmt.Errorf("An error occurred decoding discard all query response: %s", err)
+			Logger.Printf("An error occurred discarding messages on row close: %s", err)
+			return fmt.Errorf("An error occurred discarding messages on row close: %s", err)
 		}
 
 		switch resp := respInt.(type) {
@@ -117,17 +109,10 @@ func (r *boltRows) Next(dest []driver.Value) error {
 		return fmt.Errorf("Rows are already closed")
 	}
 
-	pullMessage := messages.NewPullAllMessage()
-	err := encoding.NewEncoder(r.statement.conn, r.statement.conn.chunkSize).Encode(pullMessage)
+	respInt, err := r.statement.conn.sendPullAll()
 	if err != nil {
-		Logger.Printf("An error occurred encoding pull all query: %s", err)
-		return fmt.Errorf("An error occurred encoding pull all query: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(r.statement.conn).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred decoding pull all query response: %s", err)
-		return fmt.Errorf("An error occurred decoding pull all query response: %s", err)
+		Logger.Printf("An error occurred pulling messages on row close: %s", err)
+		return fmt.Errorf("An error occurred pulling messages on row close: %s", err)
 	}
 
 	switch resp := respInt.(type) {
@@ -163,17 +148,10 @@ func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 		return nil, nil, fmt.Errorf("Rows are already closed")
 	}
 
-	pullMessage := messages.NewPullAllMessage()
-	err := encoding.NewEncoder(r.statement.conn, r.statement.conn.chunkSize).Encode(pullMessage)
+	respInt, err := r.statement.conn.sendPullAll()
 	if err != nil {
-		Logger.Printf("An error occurred encoding pull all query: %s", err)
-		return nil, nil, fmt.Errorf("An error occurred encoding pull all query: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(r.statement.conn).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred decoding pull all query response: %s", err)
-		return nil, nil, fmt.Errorf("An error occurred decoding pull all query response: %s", err)
+		Logger.Printf("An error occurred pulling messages on row close: %s", err)
+		return nil, nil, fmt.Errorf("An error occurred pulling messages on row close: %s", err)
 	}
 
 	switch resp := respInt.(type) {

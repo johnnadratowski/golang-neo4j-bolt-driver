@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -88,34 +87,19 @@ func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 		return nil, fmt.Errorf("Another query is already open")
 	}
 
-	runMessage := messages.NewRunMessage(s.query, params)
-	err := encoding.NewEncoder(s.conn, s.conn.chunkSize).Encode(runMessage)
+	respInt, err := s.conn.sendRun(s.query, params)
 	if err != nil {
-		Logger.Printf("An error occurred encoding run query: %s", err)
-		return nil, fmt.Errorf("An error occurred encoding run query: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(s.conn).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred decoding run query response: %s", err)
-		return nil, fmt.Errorf("An error occurred decoding run query response: %s", err)
+		Logger.Printf("An error occurred encoding exec query: %s", err)
+		return nil, fmt.Errorf("An error occurred encoding exec query: %s", err)
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message: %#v", resp)
 
-		pullAllMessage := messages.NewPullAllMessage()
-		err := encoding.NewEncoder(s.conn, s.conn.chunkSize).Encode(pullAllMessage)
+		metadataInt, err := s.conn.sendPullAll()
 		if err != nil {
-			Logger.Printf("An error occurred encoding pull all query: %s", err)
-			return nil, fmt.Errorf("An error occurred encoding pull all query: %s", err)
-		}
-
-		metadataInt, err := encoding.NewDecoder(s.conn).Decode()
-		if err != nil {
-			Logger.Printf("An error occurred decoding run query response: %s", err)
-			return nil, fmt.Errorf("An error occurred decoding run query response: %s", err)
+			return nil, err
 		}
 
 		switch metadataResp := metadataInt.(type) {
@@ -190,17 +174,10 @@ func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
 		return nil, fmt.Errorf("Another query is already open")
 	}
 
-	runMessage := messages.NewRunMessage(s.query, params)
-	err := encoding.NewEncoder(s.conn, s.conn.chunkSize).Encode(runMessage)
+	respInt, err := s.conn.sendRun(s.query, params)
 	if err != nil {
-		Logger.Printf("An error occurred encoding run query: %s", err)
-		return nil, fmt.Errorf("An error occurred encoding run query: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(s.conn).Decode()
-	if err != nil {
-		Logger.Printf("An error occurred decoding run query response: %s", err)
-		return nil, fmt.Errorf("An error occurred decoding run query response: %s", err)
+		Logger.Printf("An error occurred encoding query: %s", err)
+		return nil, fmt.Errorf("An error occurred encoding query: %s", err)
 	}
 
 	switch resp := respInt.(type) {

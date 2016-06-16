@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -48,14 +49,7 @@ func TestBoltStmt_SelectOne(t *testing.T) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-	err = conn.Close()
-	if err != nil {
-		t.Fatalf("An error occurred closing conn: %s", err)
-	}
-
-	if !conn.closed {
-		t.Errorf("Conn not closed at end of test")
-	}
+	conn.Close()
 }
 
 func TestBoltStmt_SelectMany(t *testing.T) {
@@ -113,14 +107,7 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-	err = conn.Close()
-	if err != nil {
-		t.Fatalf("An error occurred closing conn: %s", err)
-	}
-
-	if !conn.closed {
-		t.Errorf("Conn not closed at end of test")
-	}
+	conn.Close()
 }
 
 func TestBoltStmt_SelectIntLimits(t *testing.T) {
@@ -250,8 +237,98 @@ func TestBoltStmt_Exec(t *testing.T) {
 	if affected != expected {
 		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
 	}
-	err = conn.Close()
+
+	conn.Close()
+}
+
+func TestBoltStmt_InvalidArgs(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
 	if err != nil {
-		t.Fatalf("An error occurred closing conn: %s", err)
+		t.Fatalf("An error occurred opening conn: %s", err)
 	}
+
+	stmt, err := conn.PrepareNeo(`CREATE (f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}}) RETURN f`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	args := map[string]interface{}{
+		"a": 1,
+		"b": 34234.34323,
+		"c": "string",
+		"d": []interface{}{int8(1), "2", int8(3), true, interface{}(nil)},
+		"e": true,
+		"f": nil,
+	}
+	_, err = stmt.QueryNeo(args)
+
+	expected := "Collections containing mixed types can not be stored in properties"
+	if strings.Index(err.Error(), expected) == -1 {
+		t.Fatalf("Did not recieve expected error: %s", err)
+	}
+
+	err = conn.Close()
+}
+
+func TestBoltStmt_CreateArgs(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`CREATE (f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}}) RETURN f.a, f.b, f.c, f.d, f.e, f.f`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	args := map[string]interface{}{
+		"a": 1,
+		"b": 34234.34323,
+		"c": "string",
+		"d": []interface{}{1, 2, 3},
+		"e": true,
+		"f": nil,
+	}
+	rows, err := stmt.QueryNeo(args)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if output[0].(int8) != 1 {
+		t.Fatalf("Unexpected output. Expected 1. Got: %#v", output[0])
+	}
+	if output[1].(float64) != 34234.34323 {
+		t.Fatalf("Unexpected output. Expected 34234.34323. Got: %#v", output[1])
+	}
+	if output[2].(string) != "string" {
+		t.Fatalf("Unexpected output. Expected string. Got: %#v", output[2])
+	}
+	if !reflect.DeepEqual(output[3].([]interface{}), []interface{}{int8(1), int8(2), int8(3)}) {
+		t.Fatalf("Unexpected output. Expected []interface{}{1, 2, 3}. Got: %#v", output[3])
+	}
+	if output[4].(bool) != true {
+		t.Fatalf("Unexpected output. Expected true. Got: %#v", output[4])
+	}
+	if output[5] != nil {
+		t.Fatalf("Unexpected output. Expected nil. Got: %#v", output[5])
+	}
+
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) DELETE f`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	_, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	err = conn.Close()
 }

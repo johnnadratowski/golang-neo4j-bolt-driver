@@ -82,13 +82,7 @@ func newBoltConn(connStr string) (*boltConn, error) {
 	return c, nil
 }
 
-func (c *boltConn) initialize() error {
-	var err error
-	c.conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
-	if err != nil {
-		Logger.Printf("An error occurred connecting: %s", err)
-		return fmt.Errorf("An error occurred dialing to neo4j: %s", err)
-	}
+func (c *boltConn) handShake() error {
 
 	numWritten, err := c.Write(magicPreamble)
 	if numWritten != 4 {
@@ -97,7 +91,6 @@ func (c *boltConn) initialize() error {
 			Logger.Printf("An error occurred writing magic preamble: %s", err)
 			err = fmt.Errorf("An error occurred writing magic preamble: %s", err)
 		}
-		c.Close()
 		return err
 	}
 
@@ -108,7 +101,6 @@ func (c *boltConn) initialize() error {
 			Logger.Printf("An error occurred writing supported versions: %s", err)
 			err = fmt.Errorf("An error occurred writing supported versions: %s", err)
 		}
-		c.Close()
 		return err
 	}
 
@@ -119,25 +111,32 @@ func (c *boltConn) initialize() error {
 			Logger.Printf("An error occurred reading server version: %s", err)
 			err = fmt.Errorf("An error occurred reading server version: %s", err)
 		}
-		c.Close()
 		return err
 	} else if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
 		Logger.Println("No version supported from server")
-		c.Close()
 		return fmt.Errorf("Server responded with no supported version")
 	}
 
-	initMessage := messages.NewInitMessage(ClientID, c.authToken)
-	if err = encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
-		Logger.Printf("An error occurred reading server version: %s", err)
-		c.Close()
-		return fmt.Errorf("An error occurred reading server version: %s", err)
+	return nil
+}
+
+func (c *boltConn) initialize() error {
+	var err error
+	c.conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
+	if err != nil {
+		Logger.Printf("An error occurred connecting: %s", err)
+		return fmt.Errorf("An error occurred dialing to neo4j: %s", err)
 	}
 
-	respInt, err := encoding.NewDecoder(c).Decode()
+	if err = c.handShake(); err != nil {
+		c.Close()
+		return err
+	}
+
+	respInt, err := c.sendInit()
 	if err != nil {
 		c.Close()
-		return fmt.Errorf("An error occurred decoding object: %s", respInt)
+		return err
 	}
 
 	switch resp := respInt.(type) {
@@ -243,14 +242,19 @@ func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
 		case messages.SuccessMessage:
 			Logger.Printf("Got success message when acking failure: %#v", resp)
 			return nil
+		case messages.FailureMessage:
+			Logger.Printf("Got failure message when acking failure: %#v", resp)
+			return c.reset()
 		default:
 			Logger.Printf("Got unrecognized response from acking failure: %#v", resp)
-			return fmt.Errorf("Got unrecognized response from acking failure: %#v", resp)
+			c.Close()
+			return fmt.Errorf("Got unrecognized response from acking failure: %#v. CLOSING SESSION!", resp)
 		}
 	}
 }
 
 func (c *boltConn) reset() error {
+	Logger.Printf("Resetting session")
 
 	reset := messages.NewResetMessage()
 	err := encoding.NewEncoder(c, c.chunkSize).Encode(reset)
@@ -266,14 +270,19 @@ func (c *boltConn) reset() error {
 
 		switch resp := respInt.(type) {
 		case messages.IgnoredMessage:
-			Logger.Printf("Got ignored message when acking failure: %#v", resp)
+			Logger.Printf("Got ignored message when resetting session: %#v", resp)
 			continue
 		case messages.SuccessMessage:
-			Logger.Printf("Got success message when acking failure: %#v", resp)
+			Logger.Printf("Got success message when resetting session: %#v", resp)
 			return nil
+		case messages.FailureMessage:
+			Logger.Printf("Got failure message when resetting session: %#v", resp)
+			c.Close()
+			return fmt.Errorf("Error resetting session: %#v. CLOSING SESSION!", resp)
 		default:
-			Logger.Printf("Got unrecognized response from acking failure: %#v", resp)
-			return fmt.Errorf("Got unrecognized response from acking failure: %#v", resp)
+			Logger.Printf("Got unrecognized response from resetting session: %#v", resp)
+			c.Close()
+			return fmt.Errorf("Got unrecognized response from resetting session: %#v. CLOSING SESSION!", resp)
 		}
 	}
 }
@@ -308,16 +317,9 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 		return nil, fmt.Errorf("Connection already closed")
 	}
 
-	runMessage := messages.NewRunMessage("BEGIN", map[string]interface{}{})
-	if err := encoding.NewEncoder(c, c.chunkSize).Encode(runMessage); err != nil {
-		Logger.Printf("An error occurred beginning transaction: %s", err)
-		return nil, fmt.Errorf("An error occurred beginning transaction: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(c).Decode()
+	respInt, err := c.sendRun("BEGIN", nil)
 	if err != nil {
-		Logger.Printf("An error occurred reading beginning transaction response: %s", err)
-		return nil, fmt.Errorf("An error occurred reading beginning transaction response: %s", err)
+		return nil, fmt.Errorf("An error occurred beginning transaction: %s", err)
 	}
 
 	switch resp := respInt.(type) {
@@ -344,4 +346,76 @@ func (c *boltConn) SetChunkSize(chunkSize uint16) {
 // Sets the timeout for reading and writing to the stream
 func (c *boltConn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
+}
+
+func (c *boltConn) sendInit() (interface{}, error) {
+	Logger.Printf("Sending INIT Message. ClientID: %s AuthToken: %s", ClientID, c.authToken)
+
+	initMessage := messages.NewInitMessage(ClientID, c.authToken)
+	if err := encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
+		Logger.Printf("An error occurred sending init message: %s", err)
+		return nil, fmt.Errorf("An error occurred sending init message: %s", err)
+	}
+
+	respInt, err := encoding.NewDecoder(c).Decode()
+	if err != nil {
+		return nil, fmt.Errorf("An error occurred decoding object: %s", respInt)
+	}
+
+	return respInt, err
+}
+
+func (c *boltConn) sendRun(query string, args map[string]interface{}) (interface{}, error) {
+	Logger.Printf("Sending RUN message: query %s (args: %#v)", query, args)
+	runMessage := messages.NewRunMessage(query, args)
+	if err := encoding.NewEncoder(c, c.chunkSize).Encode(runMessage); err != nil {
+		Logger.Printf("An error occurred running query: %s", err)
+		return nil, fmt.Errorf("An error occurred running query: %s", err)
+	}
+
+	respInt, err := encoding.NewDecoder(c).Decode()
+	if err != nil {
+		Logger.Printf("An error occurred reading run query response: %s", err)
+		return nil, fmt.Errorf("An error occurred reading run query response: %s", err)
+	}
+
+	return respInt, nil
+}
+
+func (c *boltConn) sendPullAll() (interface{}, error) {
+	Logger.Println("Sending PULL_ALL message")
+
+	pullAllMessage := messages.NewPullAllMessage()
+	err := encoding.NewEncoder(c, c.chunkSize).Encode(pullAllMessage)
+	if err != nil {
+		Logger.Printf("An error occurred encoding pull all query: %s", err)
+		return nil, fmt.Errorf("An error occurred encoding pull all query: %s", err)
+	}
+
+	respInt, err := encoding.NewDecoder(c).Decode()
+	if err != nil {
+		Logger.Printf("An error occurred decoding pull all query response: %s", err)
+		return nil, fmt.Errorf("An error occurred decoding pull all query response: %s", err)
+	}
+
+	return respInt, nil
+}
+
+func (c *boltConn) sendDiscardAll() (interface{}, error) {
+	Logger.Println("Sending DISCARD_ALL message")
+
+	discardAllMessage := messages.NewDiscardAllMessage()
+	err := encoding.NewEncoder(c, c.chunkSize).Encode(discardAllMessage)
+	if err != nil {
+		Logger.Printf("An error occurred encoding discard all query: %s", err)
+		return nil, fmt.Errorf("An error occurred encoding discard all query: %s", err)
+	}
+
+	respInt, err := encoding.NewDecoder(c).Decode()
+	if err != nil {
+		Logger.Printf("An error occurred decoding discard all query response: %s", err)
+		return nil, fmt.Errorf("An error occurred decoding discard all query response: %s", err)
+	}
+
+	return respInt, nil
 }

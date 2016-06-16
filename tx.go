@@ -3,7 +3,6 @@ package golangNeo4jBoltDriver
 import (
 	"fmt"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -30,17 +29,9 @@ func (t *boltTx) Commit() error {
 		return fmt.Errorf("Transaction already closed")
 	}
 
-	var err error
-	runMessage := messages.NewRunMessage("COMMIT", map[string]interface{}{})
-	if err := encoding.NewEncoder(t.conn, t.conn.chunkSize).Encode(runMessage); err != nil {
-		Logger.Printf("An error occurred committing transaction: %s", err)
-		return fmt.Errorf("An error occurred committing transaction: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(t.conn).Decode()
+	respInt, err := t.conn.sendRun("COMMIT", nil)
 	if err != nil {
-		Logger.Printf("An error occurred reading commit transaction response: %s", err)
-		return fmt.Errorf("An error occurred reading commit transaction response: %s", err)
+		return fmt.Errorf("An error occurred committing transaction: %s", err)
 	}
 
 	switch resp := respInt.(type) {
@@ -70,21 +61,9 @@ func (t *boltTx) Rollback() error {
 		return fmt.Errorf("Transaction already closed")
 	}
 
-	var err error
-	runMessage := messages.NewRunMessage("ROLLBACK", map[string]interface{}{})
-	if err := encoding.NewEncoder(t.conn, t.conn.chunkSize).Encode(runMessage); err != nil {
-		Logger.Printf("An error occurred rollback transaction: %s", err)
-		t.conn.transaction = nil
-		t.closed = true
-		return fmt.Errorf("An error occurred rollback transaction: %s", err)
-	}
-
-	respInt, err := encoding.NewDecoder(t.conn).Decode()
+	respInt, err := t.conn.sendRun("ROLLBACK", nil)
 	if err != nil {
-		Logger.Printf("An error occurred reading rollback transaction response: %s", err)
-		t.conn.transaction = nil
-		t.closed = true
-		return fmt.Errorf("An error occurred reading rollback transaction response: %s", err)
+		return fmt.Errorf("An error occurred rolling back transaction: %s", err)
 	}
 
 	switch resp := respInt.(type) {
