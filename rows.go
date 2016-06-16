@@ -19,9 +19,18 @@ import (
 // If you want to use multiple go routines with these objects,
 // you should use a driver to create a new conn for each routine.
 type Rows interface {
+	// Columns Gets the names of the columns in the returned dataset
 	Columns() []string
+	// Metadata Gets all of the metadata returned from Neo on query start
+	Metadata() map[string]interface{}
+	// Close the rows, flushing any existing datastream
 	Close() error
-	Next(dest []driver.Value) error
+	// Next gets the next row result
+	Next([]driver.Value) error
+	// NextNeo gets the next row result
+	// When the rows are completed, returns the success metadata
+	// and io.EOF
+	NextNeo() ([]interface{}, map[string]interface{}, error)
 }
 
 type boltRows struct {
@@ -31,8 +40,9 @@ type boltRows struct {
 	consumed  bool
 }
 
-func newRows(metadata map[string]interface{}) *boltRows {
+func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
 	return &boltRows{
+		statement: statement,
 		metadata: metadata,
 	}
 }
@@ -51,6 +61,11 @@ func (r *boltRows) Columns() []string {
 	}
 
 	return fields
+}
+
+// Metadata Gets all of the metadata returned from Neo on query start
+func (r *boltRows) Metadata() map[string]interface{} {
+	return r.metadata
 }
 
 // Close closes the rows
@@ -141,42 +156,42 @@ func (r *boltRows) Next(dest []driver.Value) error {
 }
 
 // NextNeo gets the next row result
-func (r *boltRows) NextNeo(dest interface{}) (map[string]interface{}, error) {
+// When the rows are completed, returns the success metadata
+// and io.EOF
+func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 	if r.closed {
-		return nil, fmt.Errorf("Rows are already closed")
+		return nil, nil, fmt.Errorf("Rows are already closed")
 	}
 
 	pullMessage := messages.NewPullAllMessage()
 	err := encoding.NewEncoder(r.statement.conn, r.statement.conn.chunkSize).Encode(pullMessage)
 	if err != nil {
 		Logger.Printf("An error occurred encoding pull all query: %s", err)
-		return nil, fmt.Errorf("An error occurred encoding pull all query: %s", err)
+		return nil, nil, fmt.Errorf("An error occurred encoding pull all query: %s", err)
 	}
 
 	respInt, err := encoding.NewDecoder(r.statement.conn).Decode()
 	if err != nil {
 		Logger.Printf("An error occurred decoding pull all query response: %s", err)
-		return nil, fmt.Errorf("An error occurred decoding pull all query response: %s", err)
+		return nil, nil, fmt.Errorf("An error occurred decoding pull all query response: %s", err)
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message: %#v", resp)
 		r.consumed = true
-		return resp.Metadata, io.EOF
+		return nil, resp.Metadata, io.EOF
 	case messages.FailureMessage:
 		Logger.Printf("Got failure message: %#v", resp)
 		err := r.statement.conn.ackFailure(resp)
 		if err != nil {
 			Logger.Printf("An error occurred acking failure: %s", err)
 		}
-		return nil, fmt.Errorf("Got failure message: %#v", resp)
+		return nil, nil, fmt.Errorf("Got failure message: %#v", resp)
 	case messages.RecordMessage:
 		Logger.Printf("Got record message: %#v", resp)
-		dest = resp.Fields
-		// TODO: Implement conversion to driver.Value
-		return nil, nil
+		return resp.Fields, nil, nil
 	default:
-		return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+		return nil, nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
 	}
 }

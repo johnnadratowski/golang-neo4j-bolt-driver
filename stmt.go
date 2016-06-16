@@ -117,7 +117,7 @@ func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		Logger.Printf("Got success message: %#v", resp)
-		s.rows = newRows(resp.Metadata)
+		s.rows = newRows(s, resp.Metadata)
 		return s.rows, nil
 	case messages.FailureMessage:
 		Logger.Printf("Got failure message: %#v", resp)

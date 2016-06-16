@@ -58,3 +58,6 @@ tags
 
 # Recording for tests/debugging
 /recordings/
+
+# Don't commit a local neo4j instance for testing
+/neo4j/
