@@ -1,11 +1,11 @@
 package golangNeo4jBoltDriver
 
 import (
+	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"testing"
-	"fmt"
-	"math"
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {
@@ -223,7 +223,6 @@ func TestBoltStmt_Exec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting update rows affected: %s", err)
 	}
-
 
 	expected = int64(0)
 	if affected != expected {
