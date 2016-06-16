@@ -61,3 +61,6 @@ tags
 
 # Don't commit a local neo4j instance for testing
 /neo4j/
+
+# Don't commit folder with temp data
+/tmp/

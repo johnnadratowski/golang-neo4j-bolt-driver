@@ -80,6 +80,11 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 		return nil, err
 	}
 
+	// Here we have to get the marker as an int to check and see
+	// if it's a TINYINT
+	var markerInt int8
+	binary.Read(bytes.NewBuffer([]byte{marker}), binary.BigEndian, &markerInt)
+
 	switch {
 
 	// NIL
@@ -94,7 +99,7 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 
 	// INT
 	// TODO: Keep data types or cast to int/int64?
-	case int(marker) >= -16 && int(marker) <= 127:
+	case markerInt >= -16 && markerInt <= 127:
 		return int8(marker), nil
 	case marker == Int8Marker:
 		var out int8

@@ -74,12 +74,16 @@ func (t *boltTx) Rollback() error {
 	runMessage := messages.NewRunMessage("ROLLBACK", map[string]interface{}{})
 	if err := encoding.NewEncoder(t.conn, t.conn.chunkSize).Encode(runMessage); err != nil {
 		Logger.Printf("An error occurred rollback transaction: %s", err)
+		t.conn.transaction = nil
+		t.closed = true
 		return fmt.Errorf("An error occurred rollback transaction: %s", err)
 	}
 
 	respInt, err := encoding.NewDecoder(t.conn).Decode()
 	if err != nil {
 		Logger.Printf("An error occurred reading rollback transaction response: %s", err)
+		t.conn.transaction = nil
+		t.closed = true
 		return fmt.Errorf("An error occurred reading rollback transaction response: %s", err)
 	}
 

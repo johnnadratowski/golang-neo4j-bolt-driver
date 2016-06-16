@@ -43,6 +43,13 @@ func (s *boltStmt) Close() error {
 	if s.closed {
 		return nil
 	}
+
+	if s.rows != nil {
+		if err := s.rows.Close(); err != nil {
+			return err
+		}
+	}
+
 	s.closed = true
 	s.conn.statement = nil
 	s.conn = nil
@@ -56,6 +63,14 @@ func (s *boltStmt) NumInput() int {
 }
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
+//
+// This implementation does not support positional arguments,  only named arguments.
+// To meet the sql.Driver interface, this translates the args to a map[string]interface{}
+// by taking the even index numbers as keys and the odd index numbers as values. Example:
+//
+// []driver.Value{"key1", "value1", "key2", "value2"}.
+//
+// It is illegal to pass an odd number of arguments.
 func (s *boltStmt) Exec(args []driver.Value) (driver.Result, error) {
 	params, err := s.args(args)
 	if err != nil {
@@ -138,7 +153,7 @@ func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
 	}
 
 	output := map[string]interface{}{}
-	for i := 0; i < len(args) -1; i++ {
+	for i := 0; i < len(args)-1; i++ {
 		k, ok := args[i].(string)
 		if !ok {
 			return nil, fmt.Errorf("Only support strings for keys. Argument %d was not a string. Got: %T %#v", i, args[i], args[i])
@@ -150,6 +165,14 @@ func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
 }
 
 // Query executes a query that returns data. See sql/driver.Stmt.
+//
+// This implementation does not support positional arguments,  only named arguments.
+// To meet the sql.Driver interface, this translates the args to a map[string]interface{}
+// by taking the even index numbers as keys and the odd index numbers as values. Example:
+//
+// []driver.Value{"key1", "value1", "key2", "value2"}.
+//
+// It is illegal to pass an odd number of arguments.
 func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
 	params, err := s.args(args)
 	if err != nil {

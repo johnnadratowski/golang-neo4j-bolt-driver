@@ -192,6 +192,18 @@ func (c *boltConn) Close() error {
 
 	if c.transaction != nil {
 		if err := c.transaction.Rollback(); err != nil {
+			return err
+		}
+	}
+
+	if c.statement != nil {
+		if err := c.statement.Close(); err != nil {
+			return err
+		}
+	}
+
+	if c.transaction != nil {
+		if err := c.transaction.Rollback(); err != nil {
 			return fmt.Errorf("Error rolling back transaction when closing connection: %s", err)
 		}
 	}

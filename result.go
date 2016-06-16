@@ -9,7 +9,7 @@ import (
 type Result interface {
 	LastInsertId() (int64, error)
 	RowsAffected() (int64, error)
-	Metadata() (map[string]interface{})
+	Metadata() map[string]interface{}
 }
 
 // TODO: Would sql/driver.RowsAffected render this useless?
@@ -22,7 +22,7 @@ func newResult(metadata map[string]interface{}) boltResult {
 }
 
 // Returns the response metadata from the bolt success message
-func (r boltResult) Metadata() (map[string]interface{}) {
+func (r boltResult) Metadata() map[string]interface{} {
 	return r.metadata
 }
 
@@ -33,7 +33,10 @@ func (r boltResult) LastInsertId() (int64, error) {
 	return -1, nil
 }
 
-// RowsAffected returns the number of rows affected.
+// RowsAffected returns the number of nodes+rels created/deleted.  For reasons of limitations
+// on the API, we cannot tell how many nodes+rels were updated, only how many properties were
+// updated.  If this changes in the future, number updated will be added to the output of this
+// interface.
 func (r boltResult) RowsAffected() (int64, error) {
 	stats, ok := r.metadata["stats"].(map[string]interface{})
 	if !ok {
@@ -42,23 +45,43 @@ func (r boltResult) RowsAffected() (int64, error) {
 
 	var rowsAffected int64
 	nodesCreated, ok := stats["nodes-created"]
-	if ok && reflect.ValueOf(nodesCreated).Kind() == reflect.Int {
-		rowsAffected += reflect.ValueOf(nodesCreated).Int()
+	if ok {
+		switch nodesCreated.(type) {
+		case int, int8, int16, int32, int64:
+			rowsAffected += reflect.ValueOf(nodesCreated).Int()
+		default:
+			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", nodesCreated, r.metadata)
+		}
 	}
 
 	relsCreated, ok := stats["rel-created"]
-	if ok && reflect.ValueOf(relsCreated).Kind() == reflect.Int {
-		rowsAffected += reflect.ValueOf(relsCreated).Int()
+	if ok {
+		switch relsCreated.(type) {
+		case int, int8, int16, int32, int64:
+			rowsAffected += reflect.ValueOf(relsCreated).Int()
+		default:
+			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", relsCreated, r.metadata)
+		}
 	}
 
 	nodesDeleted, ok := stats["nodes-deleted"]
-	if ok && reflect.ValueOf(nodesDeleted).Kind() == reflect.Int {
-		rowsAffected += reflect.ValueOf(nodesDeleted).Int()
+	if ok {
+		switch nodesDeleted.(type) {
+		case int, int8, int16, int32, int64:
+			rowsAffected += reflect.ValueOf(nodesDeleted).Int()
+		default:
+			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", nodesDeleted, r.metadata)
+		}
 	}
 
 	relsDeleted, ok := stats["rel-deleted"]
-	if ok && reflect.ValueOf(relsDeleted).Kind() == reflect.Int {
-		rowsAffected += reflect.ValueOf(relsDeleted).Int()
+	if ok {
+		switch relsDeleted.(type) {
+		case int, int8, int16, int32, int64:
+			rowsAffected += reflect.ValueOf(relsDeleted).Int()
+		default:
+			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", relsDeleted, r.metadata)
+		}
 	}
 
 	return rowsAffected, nil
