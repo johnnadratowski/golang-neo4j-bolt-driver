@@ -11,9 +11,13 @@ import (
 type Level int
 
 const (
+	// NoneLevel is no logging
 	NoneLevel  Level = iota
+	// ErrorLevel is error logging
 	ErrorLevel Level = iota
+	// InfoLevel is info logging
 	InfoLevel  Level = iota
+	// TraceLevel is trace logging
 	TraceLevel Level = iota
 )
 
