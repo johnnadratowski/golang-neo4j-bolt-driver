@@ -12,20 +12,23 @@ type Level int
 
 const (
 	// NoneLevel is no logging
-	NoneLevel  Level = iota
+	NoneLevel Level = iota
 	// ErrorLevel is error logging
 	ErrorLevel Level = iota
 	// InfoLevel is info logging
-	InfoLevel  Level = iota
+	InfoLevel Level = iota
 	// TraceLevel is trace logging
 	TraceLevel Level = iota
 )
 
 var (
 	level    = NoneLevel
-	TraceLog = l.New(os.Stderr, "[BOLT][TRACE]", l.LstdFlags)
-	InfoLog  = l.New(os.Stderr, "[BOLT][INFO]", l.LstdFlags)
+	// ErrorLog is the logger for error logging
 	ErrorLog = l.New(os.Stderr, "[BOLT][ERROR]", l.LstdFlags)
+	// InfoLog is the logger for info logging
+	InfoLog  = l.New(os.Stderr, "[BOLT][INFO]", l.LstdFlags)
+	// TraceLog is the logger for trace logging
+	TraceLog = l.New(os.Stderr, "[BOLT][TRACE]", l.LstdFlags)
 )
 
 // SetLevel sets the logging level of this package
