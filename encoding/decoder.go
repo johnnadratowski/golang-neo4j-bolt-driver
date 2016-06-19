@@ -210,13 +210,13 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	case marker >= TinyStructMarker && marker <= TinyStructMarker+0x0F:
 		size := int(marker) - int(TinyStructMarker)
 		return d.decodeStruct(buffer, size)
-	case marker == Map8Marker:
+	case marker == Struct8Marker:
 		var size int8
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
 			return nil, errors.Wrap(err, "An error occurred reading struct size")
 		}
 		return d.decodeStruct(buffer, int(size))
-	case marker == Map16Marker:
+	case marker == Struct16Marker:
 		var size int16
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
 			return nil, errors.Wrap(err, "An error occurred reading struct size")
