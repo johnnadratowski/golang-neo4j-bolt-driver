@@ -22,11 +22,11 @@ const (
 )
 
 var (
-	level    = NoneLevel
+	level = NoneLevel
 	// ErrorLog is the logger for error logging
 	ErrorLog = l.New(os.Stderr, "[BOLT][ERROR]", l.LstdFlags)
 	// InfoLog is the logger for info logging
-	InfoLog  = l.New(os.Stderr, "[BOLT][INFO]", l.LstdFlags)
+	InfoLog = l.New(os.Stderr, "[BOLT][INFO]", l.LstdFlags)
 	// TraceLog is the logger for trace logging
 	TraceLog = l.New(os.Stderr, "[BOLT][TRACE]", l.LstdFlags)
 )
