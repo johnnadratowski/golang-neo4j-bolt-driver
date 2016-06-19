@@ -8,7 +8,7 @@ const (
 // Path Represents a Path structure
 type Path struct {
 	Nodes         []Node
-	Relationships []Relationship
+	Relationships []UnboundRelationship
 	Sequence      []int
 }
 

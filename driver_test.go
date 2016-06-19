@@ -21,5 +21,28 @@ func TestMain(m *testing.M) {
 
 	log.SetLevel(os.Getenv("BOLT_DRIVER_LOG"))
 
-	os.Exit(m.Run())
+	output := m.Run()
+
+	clearNeo()
+
+	os.Exit(output)
+}
+
+func clearNeo() {
+	driver := NewDriver()
+	conn, err := driver.OpenNeo(neo4jConnStr)
+	if err != nil {
+		panic("Error getting conn to clear DB")
+	}
+
+	stmt, err := conn.PrepareNeo(`MATCH (n) DETACH DELETE n`)
+	if err != nil {
+		panic("Error getting stmt to clear DB")
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecNeo(nil)
+	if err != nil {
+		panic("Error running query to clear DB")
+	}
 }

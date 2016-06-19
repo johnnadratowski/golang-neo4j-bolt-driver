@@ -596,58 +596,75 @@ func TestBoltStmt_Objects(t *testing.T) {
 	}
 }
 
-//func TestBoltStmt_Path(t *testing.T) {
-//	conn, err := newBoltConn(neo4jConnStr)
-//	if err != nil {
-//		t.Fatalf("An error occurred opening conn: %s", err)
-//	}
-//
-//	stmt, err := conn.PrepareNeo(`CREATE path=(f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN path`)
-//	if err != nil {
-//		t.Fatalf("An error occurred preparing statement: %s", err)
-//	}
-//
-//	rows, err := stmt.QueryNeo(nil)
-//	if err != nil {
-//		t.Fatalf("An error occurred querying Neo: %s", err)
-//	}
-//
-//	output, _, err := rows.NextNeo()
-//	if err != nil {
-//		t.Fatalf("An error occurred getting next row: %s", err)
-//	}
-//
-//	if output[0].(graph.Node).Labels[0] != "FOO" {
-//		t.Fatalf("Unexpected return data: %s", err)
-//	}
-//	if output[1].(graph.Relationship).Type != "TO" {
-//		t.Fatalf("Unexpected return data: %s", err)
-//	}
-//	if output[2].(graph.Node).Labels[0] != "BAR" {
-//		t.Fatalf("Unexpected return data: %s", err)
-//	}
-//	if output[3].(graph.Relationship).Type != "FROM" {
-//		t.Fatalf("Unexpected return data: %s", err)
-//	}
-//	if output[4].(graph.Node).Labels[0] != "BAZ" {
-//		t.Fatalf("Unexpected return data: %s", err)
-//	}
-//
-//	// Closing in middle of record stream
-//	stmt.Close()
-//
-//	stmt, err = conn.PrepareNeo(`MATCH (f:FOO)-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) DELETE f, b, c, d, e`)
-//	if err != nil {
-//		t.Fatalf("An error occurred preparing delete statement: %s", err)
-//	}
-//
-//	_, err = stmt.ExecNeo(nil)
-//	if err != nil {
-//		t.Fatalf("An error occurred on delete query to Neo: %s", err)
-//	}
-//
-//	err = conn.Close()
-//	if err != nil {
-//		t.Fatalf("Error closing connection: %s", err)
-//	}
-//}
+func TestBoltStmt_Path(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`CREATE path=(f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN path`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	rows, err := stmt.QueryNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	path, ok := output[0].(graph.Path)
+	if !ok {
+		t.Fatalf("Unrecognized return type for path: %#v", output[0])
+	}
+
+	if path.Nodes[0].Labels[0] != "FOO" {
+		t.Fatalf("Unexpected node return data 1: %#v", path)
+	}
+	if path.Nodes[1].Labels[0] != "BAR" {
+		t.Fatalf("Unexpected node return data 2: %#v", path)
+	}
+	if path.Nodes[2].Labels[0] != "BAZ" {
+		t.Fatalf("Unexpected node return data 3: %#v", path)
+	}
+	if path.Relationships[0].Type != "TO" {
+		t.Fatalf("Unexpected relationship return data: %#v", path)
+	}
+	if path.Relationships[1].Type != "FROM" {
+		t.Fatalf("Unexpected relationship return data: %#v", path)
+	}
+	if path.Sequence[0] != 1 {
+		t.Fatalf("Unexpected sequence return data: %#v", path)
+	}
+	if path.Sequence[1] != 1 {
+		t.Fatalf("Unexpected sequence return data: %#v", path)
+	}
+	if path.Sequence[2] != -2 {
+		t.Fatalf("Unexpected sequence return data: %#v", path)
+	}
+	if path.Sequence[3] != 2 {
+		t.Fatalf("Unexpected sequence return data: %#v", path)
+	}
+
+	// Closing in middle of record stream
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO)-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) DELETE f, b, c, d, e`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	_, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}

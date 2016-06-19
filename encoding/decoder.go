@@ -426,7 +426,7 @@ func (d Decoder) decodePath(buffer *bytes.Buffer) (graph.Path, error) {
 	if !ok {
 		return path, errors.New("Expected: Relationships []Relationship, but got %T %+v", relsInt, relsInt)
 	}
-	path.Relationships, err = sliceInterfaceToRelationship(relsIntSlice)
+	path.Relationships, err = sliceInterfaceToUnboundRelationship(relsIntSlice)
 	if err != nil {
 		return path, err
 	}

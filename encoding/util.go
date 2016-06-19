@@ -3,6 +3,7 @@ package encoding
 import (
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
+	"reflect"
 )
 
 func sliceInterfaceToString(from []interface{}) ([]string, error) {
@@ -10,7 +11,7 @@ func sliceInterfaceToString(from []interface{}) ([]string, error) {
 	for idx, item := range from {
 		toItem, ok := item.(string)
 		if !ok {
-			return nil, errors.New("Expected string value. Got %T %+v", toItem, toItem)
+			return nil, errors.New("Expected string value. Got %T %+v", item, item)
 		}
 		to[idx] = toItem
 	}
@@ -20,11 +21,12 @@ func sliceInterfaceToString(from []interface{}) ([]string, error) {
 func sliceInterfaceToInt(from []interface{}) ([]int, error) {
 	to := make([]int, len(from))
 	for idx, item := range from {
-		toItem, ok := item.(int)
-		if !ok {
-			return nil, errors.New("Expected Node value. Got %T %+v", toItem, toItem)
+		switch item.(type) {
+		case int, int8, int16, int32, int64:
+			to[idx] = int(reflect.ValueOf(item).Int())
+		default:
+			return to, errors.New("Unrecognized type for int: %d", item)
 		}
-		to[idx] = toItem
 	}
 	return to, nil
 }
@@ -34,7 +36,7 @@ func sliceInterfaceToNode(from []interface{}) ([]graph.Node, error) {
 	for idx, item := range from {
 		toItem, ok := item.(graph.Node)
 		if !ok {
-			return nil, errors.New("Expected Node value. Got %T %+v", toItem, toItem)
+			return nil, errors.New("Expected Node value. Got %T %+v", item, item)
 		}
 		to[idx] = toItem
 	}
@@ -46,7 +48,19 @@ func sliceInterfaceToRelationship(from []interface{}) ([]graph.Relationship, err
 	for idx, item := range from {
 		toItem, ok := item.(graph.Relationship)
 		if !ok {
-			return nil, errors.New("Expected Relationship value. Got %T %+v", toItem, toItem)
+			return nil, errors.New("Expected Relationship value. Got %T %+v", item, item)
+		}
+		to[idx] = toItem
+	}
+	return to, nil
+}
+
+func sliceInterfaceToUnboundRelationship(from []interface{}) ([]graph.UnboundRelationship, error) {
+	to := make([]graph.UnboundRelationship, len(from))
+	for idx, item := range from {
+		toItem, ok := item.(graph.UnboundRelationship)
+		if !ok {
+			return nil, errors.New("Expected UnboundRelationship value. Got %T %+v", item, item)
 		}
 		to[idx] = toItem
 	}

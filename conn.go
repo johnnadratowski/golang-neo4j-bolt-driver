@@ -29,6 +29,7 @@ import (
 // you should use a driver to create a new conn for each routine.
 type Conn interface {
 	Prepare(query string) (driver.Stmt, error)
+	PrepareNeo(query string) (Stmt, error)
 	Close() error
 	Begin() (driver.Tx, error)
 	SetChunkSize(uint16)
