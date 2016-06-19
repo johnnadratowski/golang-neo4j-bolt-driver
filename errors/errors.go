@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Base error type adds stack trace and wrapping errors
+// Error is the base error type adds stack trace and wrapping errors
 type Error struct {
 	msg     string
 	wrapped error
@@ -30,12 +30,12 @@ func Wrap(err error, msg string, args ...interface{}) *Error {
 			msg:     fmt.Sprintf(msg, args...),
 			wrapped: e,
 		}
-	} else {
-		return &Error{
-			msg:     fmt.Sprintf(msg, args...),
-			wrapped: err,
-			stack:   debug.Stack(),
-		}
+	}
+
+	return &Error{
+		msg:     fmt.Sprintf(msg, args...),
+		wrapped: err,
+		stack:   debug.Stack(),
 	}
 }
 

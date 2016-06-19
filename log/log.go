@@ -7,94 +7,111 @@ import (
 	"strings"
 )
 
-type LogLevel int
+// Level is the logging level
+type Level int
 
 const (
-	NoneLevel  LogLevel = iota
-	ErrorLevel LogLevel = iota
-	InfoLevel  LogLevel = iota
-	TraceLevel LogLevel = iota
+	NoneLevel  Level = iota
+	ErrorLevel Level = iota
+	InfoLevel  Level = iota
+	TraceLevel Level = iota
 )
 
 var (
-	Level    = NoneLevel
+	level    = NoneLevel
 	TraceLog = l.New(os.Stderr, "[BOLT][TRACE]", l.LstdFlags)
 	InfoLog  = l.New(os.Stderr, "[BOLT][INFO]", l.LstdFlags)
 	ErrorLog = l.New(os.Stderr, "[BOLT][ERROR]", l.LstdFlags)
 )
 
-func SetLevel(level string) {
-	switch strings.ToLower(level) {
+// SetLevel sets the logging level of this package
+func SetLevel(levelStr string) {
+	switch strings.ToLower(levelStr) {
 	case "trace":
-		Level = TraceLevel
+		level = TraceLevel
 	case "info":
-		Level = InfoLevel
+		level = InfoLevel
 	case "error":
-		Level = ErrorLevel
+		level = ErrorLevel
 	default:
-		Level = NoneLevel
+		level = NoneLevel
 	}
 }
 
+// GetLevel gets the logging level
+func GetLevel() Level {
+	return level
+}
+
+// Trace writes a trace log in the format of Println
 func Trace(args ...interface{}) {
-	if Level >= TraceLevel {
+	if level >= TraceLevel {
 		TraceLog.Println(args...)
 	}
 }
 
+// Tracef writes a trace log in the format of Printf
 func Tracef(msg string, args ...interface{}) {
-	if Level >= TraceLevel {
+	if level >= TraceLevel {
 		TraceLog.Printf(msg, args...)
 	}
 }
 
+// Info writes an info log in the format of Println
 func Info(args ...interface{}) {
-	if Level >= InfoLevel {
+	if level >= InfoLevel {
 		InfoLog.Println(args...)
 	}
 }
 
+// Infof writes an info log in the format of Printf
 func Infof(msg string, args ...interface{}) {
-	if Level >= InfoLevel {
+	if level >= InfoLevel {
 		InfoLog.Printf(msg, args...)
 	}
 }
 
+// Error writes an error log in the format of Println
 func Error(args ...interface{}) {
-	if Level >= ErrorLevel {
+	if level >= ErrorLevel {
 		ErrorLog.Println(args...)
 	}
 }
 
+// Errorf writes an error log in the format of Printf
 func Errorf(msg string, args ...interface{}) {
-	if Level >= ErrorLevel {
+	if level >= ErrorLevel {
 		ErrorLog.Printf(msg, args...)
 	}
 }
 
+// Fatal writes an error log in the format of Fatalln
 func Fatal(args ...interface{}) {
-	if Level >= ErrorLevel {
+	if level >= ErrorLevel {
 		ErrorLog.Println(args...)
 		os.Exit(1)
 	}
 }
 
+// Fatalf writes an error log in the format of Fatalf
 func Fatalf(msg string, args ...interface{}) {
-	if Level >= ErrorLevel {
+	if level >= ErrorLevel {
 		ErrorLog.Printf(msg, args...)
 		os.Exit(1)
 	}
 }
 
+// Panic writes an error log in the format of Panicln
 func Panic(args ...interface{}) {
-	if Level >= ErrorLevel {
+	if level >= ErrorLevel {
 		ErrorLog.Println(args...)
 		panic(fmt.Sprint(args...))
 	}
 }
 
+// Panicf writes an error log in the format of Panicf
 func Panicf(msg string, args ...interface{}) {
-	if Level >= ErrorLevel {
+	if level >= ErrorLevel {
 		ErrorLog.Printf(msg, args...)
 		panic(fmt.Sprintf(msg, args...))
 	}

@@ -160,7 +160,7 @@ func (c *boltConn) Read(b []byte) (n int, err error) {
 
 	n, err = c.conn.Read(b)
 
-	if log.Level >= log.TraceLevel {
+	if log.GetLevel() >= log.TraceLevel {
 		log.Tracef("Read %d bytes from stream:\n\n%s\n", n, sprintByteHex(b))
 	}
 
@@ -178,7 +178,7 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 
 	n, err = c.conn.Write(b)
 
-	if log.Level >= log.TraceLevel {
+	if log.GetLevel() >= log.TraceLevel {
 		log.Tracef("Wrote %d of %d bytes to stream:\n\n%s\n", len(b), n, sprintByteHex(b[:n]))
 	}
 
