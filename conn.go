@@ -112,7 +112,7 @@ func (c *boltConn) handShake() error {
 			err = fmt.Errorf("An error occurred reading server version: %s", err)
 		}
 		return err
-	} else if bytes.Compare(c.serverVersion, noVersionSupported) == 0 {
+	} else if bytes.Equal(c.serverVersion, noVersionSupported) {
 		Logger.Println("No version supported from server")
 		return fmt.Errorf("Server responded with no supported version")
 	}
@@ -129,13 +129,17 @@ func (c *boltConn) initialize() error {
 	}
 
 	if err = c.handShake(); err != nil {
-		c.Close()
+		if e := c.Close(); e != nil {
+			Logger.Printf("An error occurred closing connection: %s", e)
+		}
 		return err
 	}
 
 	respInt, err := c.sendInit()
 	if err != nil {
-		c.Close()
+		if e := c.Close(); e != nil {
+			Logger.Printf("An error occurred closing connection: %s", e)
+		}
 		return err
 	}
 
@@ -145,7 +149,9 @@ func (c *boltConn) initialize() error {
 		return nil
 	default:
 		Logger.Printf("Got an unrecognized message when initializing connection :%+v", resp)
-		c.Close()
+		if e := c.Close(); e != nil {
+			Logger.Printf("An error occurred closing connection: %s", e)
+		}
 		return fmt.Errorf("Unrecognized response from the server: %#v", resp)
 	}
 }
@@ -243,7 +249,10 @@ func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
 			return c.reset()
 		default:
 			Logger.Printf("Got unrecognized response from acking failure: %#v", resp)
-			c.Close()
+			err := c.Close()
+			if err != nil {
+				Logger.Printf("An error occurred closing the session: %s", err)
+			}
 			return fmt.Errorf("Got unrecognized response from acking failure: %#v. CLOSING SESSION!", resp)
 		}
 	}
@@ -273,11 +282,17 @@ func (c *boltConn) reset() error {
 			return nil
 		case messages.FailureMessage:
 			Logger.Printf("Got failure message when resetting session: %#v", resp)
-			c.Close()
+			err = c.Close()
+			if err != nil {
+				Logger.Printf("An error occurred closing the session: %s", err)
+			}
 			return fmt.Errorf("Error resetting session: %#v. CLOSING SESSION!", resp)
 		default:
 			Logger.Printf("Got unrecognized response from resetting session: %#v", resp)
-			c.Close()
+			err = c.Close()
+			if err != nil {
+				Logger.Printf("An error occurred closing the session: %s", err)
+			}
 			return fmt.Errorf("Got unrecognized response from resetting session: %#v. CLOSING SESSION!", resp)
 		}
 	}

@@ -7,7 +7,7 @@ const (
 
 // Node Represents a Node structure
 type Node struct {
-	NodeIdentity int
+	NodeIdentity int64
 	Labels       []string
 	Properties   map[string]interface{}
 }

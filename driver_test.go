@@ -19,13 +19,13 @@ func TestMain(m *testing.M) {
 	}
 
 	if os.Getenv("BOLT_DRIVER_LOG") != "" {
-		Logger = log.New(os.Stderr, "[NEO4J BOLT DRIVER] ", log.LstdFlags)
+		Logger = log.New(os.Stderr, "[BOLT] ", log.LstdFlags)
 	}
 	if os.Getenv("BOLT_DRIVER_TRACE_LOG") != "" {
-		TraceLogger = log.New(os.Stderr, "[NEO4J BOLT DRIVER][TRACE] ", log.LstdFlags)
+		TraceLogger = log.New(os.Stderr, "[BOLT][TRACE] ", log.LstdFlags)
 	}
 
-	m.Run()
+	os.Exit(m.Run())
 }
 
 func TestBoltDriver_Open(t *testing.T) {

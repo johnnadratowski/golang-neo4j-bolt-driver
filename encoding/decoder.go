@@ -8,6 +8,7 @@ import (
 
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"reflect"
 )
 
 // Decoder decodes a message from the bolt protocol stream
@@ -59,7 +60,12 @@ func (d Decoder) read() (*bytes.Buffer, error) {
 			return nil, fmt.Errorf("Couldn't read expected bytes for message. Read: %d Expected: %d.  Error: %s", numRead, messageLen, err)
 		}
 
-		output.Write(data)
+		numWritten, err := output.Write(data)
+		if numWritten < len(data) {
+			return output, fmt.Errorf("Didn't write full data on output. Expected: %d Wrote: %d", len(data), numWritten)
+		} else if err != nil {
+			return output, fmt.Errorf("Error writing data to output: %s", err)
+		}
 	}
 }
 
@@ -77,13 +83,16 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 
 	marker, err := buffer.ReadByte()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error reading marker: %s", err)
 	}
 
 	// Here we have to get the marker as an int to check and see
 	// if it's a TINYINT
 	var markerInt int8
-	binary.Read(bytes.NewBuffer([]byte{marker}), binary.BigEndian, &markerInt)
+	err = binary.Read(bytes.NewBuffer([]byte{marker}), binary.BigEndian, &markerInt)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading marker as int8 from bolt message: %s", err)
+	}
 
 	switch {
 
@@ -295,180 +304,179 @@ func (d Decoder) decodeStruct(buffer *bytes.Buffer, size int) (interface{}, erro
 }
 
 func (d Decoder) decodeNode(buffer *bytes.Buffer) (graph.Node, error) {
+	node := graph.Node{}
+
 	nodeIdentityInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Node{}, err
+		return node, err
 	}
-	nodeIdentity, ok := nodeIdentityInt.(int)
-	if !ok {
-		return graph.Node{}, fmt.Errorf("Expected: Node Identity int, but got %T %+v", nodeIdentityInt, nodeIdentityInt)
+	switch nodeIdentityInt.(type) {
+	case int, int8, int16, int32, int64:
+		node.NodeIdentity = reflect.ValueOf(nodeIdentityInt).Int()
+	default:
+		return node, fmt.Errorf("Expected: Node Identity int, but got %T %+v", nodeIdentityInt, nodeIdentityInt)
 	}
 
 	labelInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Node{}, err
+		return node, err
 	}
 	labelIntSlice, ok := labelInt.([]interface{})
 	if !ok {
-		return graph.Node{}, fmt.Errorf("Expected: Labels []string, but got %T %+v", labelInt, labelInt)
+		return node, fmt.Errorf("Expected: Labels []string, but got %T %+v", labelInt, labelInt)
 	}
-	labels, err := sliceInterfaceToString(labelIntSlice)
+	node.Labels, err = sliceInterfaceToString(labelIntSlice)
 	if err != nil {
-		return graph.Node{}, err
+		return node, err
 	}
 
 	propertiesInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Node{}, err
+		return node, err
 	}
-	properties, ok := propertiesInt.(map[string]interface{})
+	node.Properties, ok = propertiesInt.(map[string]interface{})
 	if !ok {
-		return graph.Node{}, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
+		return node, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
 	}
 
-	return graph.Node{
-		NodeIdentity: nodeIdentity,
-		Labels:       labels,
-		Properties:   properties,
-	}, nil
+	return node, nil
 
 }
 
 func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, error) {
+	rel := graph.Relationship{}
+
 	relIdentityInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Relationship{}, err
+		return rel, err
 	}
-	relIdentity, ok := relIdentityInt.(int)
-	if !ok {
-		return graph.Relationship{}, fmt.Errorf("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
+	switch relIdentityInt.(type) {
+	case int, int8, int16, int32, int64:
+		rel.RelIdentity = reflect.ValueOf(relIdentityInt).Int()
+	default:
+		return rel, fmt.Errorf("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
 	}
 
 	startNodeIdentityInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Relationship{}, err
+		return rel, err
 	}
-	startNodeIdentity, ok := startNodeIdentityInt.(int)
-	if !ok {
-		return graph.Relationship{}, fmt.Errorf("Expected: Start Node Identity int, but got %T %+v", startNodeIdentityInt, startNodeIdentityInt)
+	switch startNodeIdentityInt.(type) {
+	case int, int8, int16, int32, int64:
+		rel.StartNodeIdentity = reflect.ValueOf(startNodeIdentityInt).Int()
+	default:
+		return rel, fmt.Errorf("Expected: Start Node Identity int, but got %T %+v", startNodeIdentityInt, startNodeIdentityInt)
 	}
 
 	endNodeIdentityInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Relationship{}, err
+		return rel, err
 	}
-	endNodeIdentity, ok := endNodeIdentityInt.(int)
-	if !ok {
-		return graph.Relationship{}, fmt.Errorf("Expected: End Node Identity int, but got %T %+v", endNodeIdentityInt, endNodeIdentityInt)
+	switch endNodeIdentityInt.(type) {
+	case int, int8, int16, int32, int64:
+		rel.EndNodeIdentity = reflect.ValueOf(endNodeIdentityInt).Int()
+	default:
+		return rel, fmt.Errorf("Expected: End Node Identity int, but got %T %+v", endNodeIdentityInt, endNodeIdentityInt)
 	}
 
+	var ok bool
 	typeInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Relationship{}, err
+		return rel, err
 	}
-	typee, ok := typeInt.(string)
+	rel.Type, ok = typeInt.(string)
 	if !ok {
-		return graph.Relationship{}, fmt.Errorf("Expected: Type string, but got %T %+v", typee, typee)
+		return rel, fmt.Errorf("Expected: Type string, but got %T %+v", typeInt, typeInt)
 	}
 
 	propertiesInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Relationship{}, err
+		return rel, err
 	}
-	properties, ok := propertiesInt.(map[string]interface{})
+	rel.Properties, ok = propertiesInt.(map[string]interface{})
 	if !ok {
-		return graph.Relationship{}, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
+		return rel, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
 	}
 
-	return graph.Relationship{
-		RelIdentity:       relIdentity,
-		StartNodeIdentity: startNodeIdentity,
-		EndNodeIdentity:   endNodeIdentity,
-		Type:              typee,
-		Properties:        properties,
-	}, nil
+	return rel, nil
 }
 
 func (d Decoder) decodePath(buffer *bytes.Buffer) (graph.Path, error) {
+	path := graph.Path{}
+
 	nodesInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Path{}, err
+		return path, err
 	}
 	nodesIntSlice, ok := nodesInt.([]interface{})
 	if !ok {
-		return graph.Path{}, fmt.Errorf("Expected: Nodes []Node, but got %T %+v", nodesInt, nodesInt)
+		return path, fmt.Errorf("Expected: Nodes []Node, but got %T %+v", nodesInt, nodesInt)
 	}
-	nodes, err := sliceInterfaceToNode(nodesIntSlice)
+	path.Nodes, err = sliceInterfaceToNode(nodesIntSlice)
 	if err != nil {
-		return graph.Path{}, err
+		return path, err
 	}
 
 	relsInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Path{}, err
+		return path, err
 	}
 	relsIntSlice, ok := relsInt.([]interface{})
 	if !ok {
-		return graph.Path{}, fmt.Errorf("Expected: Relationships []Relationship, but got %T %+v", relsInt, relsInt)
+		return path, fmt.Errorf("Expected: Relationships []Relationship, but got %T %+v", relsInt, relsInt)
 	}
-	rels, err := sliceInterfaceToRelationship(relsIntSlice)
+	path.Relationships, err = sliceInterfaceToRelationship(relsIntSlice)
 	if err != nil {
-		return graph.Path{}, err
+		return path, err
 	}
 
 	seqInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.Path{}, err
+		return path, err
 	}
 	seqIntSlice, ok := seqInt.([]interface{})
 	if !ok {
-		return graph.Path{}, fmt.Errorf("Expected: Sequence []int, but got %T %+v", seqInt, seqInt)
+		return path, fmt.Errorf("Expected: Sequence []int, but got %T %+v", seqInt, seqInt)
 	}
-	seq, err := sliceInterfaceToInt(seqIntSlice)
-	if err != nil {
-		return graph.Path{}, err
-	}
+	path.Sequence, err = sliceInterfaceToInt(seqIntSlice)
 
-	return graph.Path{
-		Nodes:         nodes,
-		Relationships: rels,
-		Sequence:      seq,
-	}, nil
+	return path, err
 }
 
 func (d Decoder) decodeUnboundRelationship(buffer *bytes.Buffer) (graph.UnboundRelationship, error) {
+	rel := graph.UnboundRelationship{}
+
 	relIdentityInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.UnboundRelationship{}, err
+		return rel, err
 	}
-	relIdentity, ok := relIdentityInt.(int)
-	if !ok {
-		return graph.UnboundRelationship{}, fmt.Errorf("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
+	switch relIdentityInt.(type) {
+	case int, int8, int16, int32, int64:
+		rel.RelIdentity = reflect.ValueOf(relIdentityInt).Int()
+	default:
+		return rel, fmt.Errorf("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
 	}
 
+	var ok bool
 	typeInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.UnboundRelationship{}, err
+		return rel, err
 	}
-	typee, ok := typeInt.(string)
+	rel.Type, ok = typeInt.(string)
 	if !ok {
-		return graph.UnboundRelationship{}, fmt.Errorf("Expected: Type string, but got %T %+v", typee, typee)
+		return rel, fmt.Errorf("Expected: Type string, but got %T %+v", typeInt, typeInt)
 	}
 
 	propertiesInt, err := d.decode(buffer)
 	if err != nil {
-		return graph.UnboundRelationship{}, err
+		return rel, err
 	}
-	properties, ok := propertiesInt.(map[string]interface{})
+	rel.Properties, ok = propertiesInt.(map[string]interface{})
 	if !ok {
-		return graph.UnboundRelationship{}, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
+		return rel, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
 	}
 
-	return graph.UnboundRelationship{
-		RelIdentity: relIdentity,
-		Type:        typee,
-		Properties:  properties,
-	}, nil
+	return rel, nil
 }
 
 func (d Decoder) decodeRecordMessage(buffer *bytes.Buffer) (messages.RecordMessage, error) {

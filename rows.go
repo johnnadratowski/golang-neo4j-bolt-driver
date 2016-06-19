@@ -33,9 +33,9 @@ type Rows interface {
 }
 
 type boltRows struct {
-	closed          bool
 	metadata        map[string]interface{}
 	statement       *boltStmt
+	closed          bool
 	consumed        bool
 	finishedConsume bool
 }

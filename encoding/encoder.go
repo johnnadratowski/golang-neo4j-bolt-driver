@@ -97,16 +97,15 @@ func NewEncoder(w io.Writer, chunkSize uint16) Encoder {
 // write writes to the writer.  Buffers the writes using chunkSize.
 func (e Encoder) Write(p []byte) (n int, err error) {
 
-	// TODO: Reset on Error? Close on error?
 	length := e.buf.Len()
-	if length >= int(e.chunkSize) {
-		if err := binary.Write(e.w, binary.BigEndian, length); err != nil {
+	for length >= int(e.chunkSize) {
+		if err := binary.Write(e.w, binary.BigEndian, e.chunkSize); err != nil {
 			return 0, err
 		}
 
-		numWritten, err := e.buf.WriteTo(e.w)
+		numWritten, err := e.w.Write(e.buf.Next(int(e.chunkSize)))
 		// TODO: Probably shouldn't downcast here
-		return int(numWritten), err
+		return numWritten, err
 	}
 
 	return e.buf.Write(p)
@@ -125,7 +124,10 @@ func (e Encoder) flush() error {
 		}
 	}
 
-	e.w.Write(EndMessage)
+	_, err := e.w.Write(EndMessage)
+	if err != nil {
+		return fmt.Errorf("An error occurred ending encoding message: %s", err)
+	}
 	e.buf.Reset()
 
 	return nil
@@ -166,7 +168,7 @@ func (e Encoder) encode(iVal interface{}) error {
 	case int32:
 		err = e.encodeInt(int64(val))
 	case int64:
-		err = e.encodeInt(int64(val))
+		err = e.encodeInt(val)
 	case uint:
 		err = e.encodeInt(int64(val))
 	case uint8:
@@ -297,22 +299,22 @@ func (e Encoder) encodeString(val string) error {
 	length := len(bytes)
 	switch {
 	case length <= 15:
-		if _, err := e.Write([]byte{byte(TinyStringMarker + length)}); err != nil {
+		if _, err = e.Write([]byte{byte(TinyStringMarker + length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length > 15 && length <= math.MaxUint8:
-		if _, err := e.Write([]byte{String8Marker, byte(length)}); err != nil {
+		if _, err = e.Write([]byte{String8Marker, byte(length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length > math.MaxUint8 && length <= math.MaxUint16:
-		if _, err := e.Write([]byte{String16Marker, byte(length)}); err != nil {
+		if _, err = e.Write([]byte{String16Marker, byte(length)}); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length >= math.MaxUint16 && length <= math.MaxUint32:
-		if _, err := e.Write([]byte{String32Marker, byte(length)}); err != nil {
+		if _, err = e.Write([]byte{String32Marker, byte(length)}); err != nil {
 			// encodeNil encodes a nil object to the stream
 			return err
 		}
@@ -421,11 +423,14 @@ func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
 		return fmt.Errorf("Structure too long to write: %+v", val)
 	}
 
-	e.Write([]byte{byte(val.Signature())})
+	_, err := e.Write([]byte{byte(val.Signature())})
+	if err != nil {
+		return fmt.Errorf("An error occurred writing to encoder a struct field: %s", err)
+	}
 
 	for _, field := range fields {
 		if err := e.encode(field); err != nil {
-			return err
+			return fmt.Errorf("An error occurred encoding a struct field: %s", err)
 		}
 	}
 

@@ -7,9 +7,9 @@ const (
 
 // Relationship Represents a Relationship structure
 type Relationship struct {
-	RelIdentity       int
-	StartNodeIdentity int
-	EndNodeIdentity   int
+	RelIdentity       int64
+	StartNodeIdentity int64
+	EndNodeIdentity   int64
 	Type              string
 	Properties        map[string]interface{}
 }
