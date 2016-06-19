@@ -2,9 +2,9 @@ package golangNeo4jBoltDriver
 
 import (
 	"database/sql/driver"
-	"errors"
-	"fmt"
 
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -71,7 +71,7 @@ func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
 	for i := 0; i < len(args)-1; i++ {
 		k, ok := args[i].(string)
 		if !ok {
-			return nil, fmt.Errorf("Only support strings for keys. Argument %d was not a string. Got: %T %#v", i, args[i], args[i])
+			return nil, errors.New("Only support strings for keys. Argument %d was not a string. Got: %T %#v", i, args[i], args[i])
 		}
 		output[k] = args[i+1].(interface{})
 	}
@@ -99,21 +99,20 @@ func (s *boltStmt) Exec(args []driver.Value) (driver.Result, error) {
 // ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
 func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 	if s.closed {
-		return nil, fmt.Errorf("Neo4j Bolt statement already closed")
+		return nil, errors.New("Neo4j Bolt statement already closed")
 	}
 	if s.rows != nil {
-		return nil, fmt.Errorf("Another query is already open")
+		return nil, errors.New("Another query is already open")
 	}
 
 	respInt, err := s.conn.sendRun(s.query, params)
 	if err != nil {
-		Logger.Printf("An error occurred encoding exec query: %s", err)
 		return nil, err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Got success message: %#v", resp)
+		log.Infof("Got success message: %#v", resp)
 
 		err := s.conn.sendPullAll()
 		if err != nil {
@@ -127,13 +126,13 @@ func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 
 		switch metadataResp := metaDataInt.(type) {
 		case messages.SuccessMessage:
-			Logger.Printf("Got success message: %#v", metadataResp)
+			log.Infof("Got success message: %#v", metadataResp)
 			return newResult(metadataResp.Metadata), nil
 		default:
-			return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", metadataResp, metadataResp)
+			return nil, errors.New("Unrecognized response type: %T Value: %#v", metadataResp, metadataResp)
 		}
 	default:
-		return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+		return nil, errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
 	}
 }
 
@@ -157,24 +156,23 @@ func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
 // QueryNeo executes a query that returns data. Implements a Neo-friendly alternative to sql/driver.
 func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
 	if s.closed {
-		return nil, fmt.Errorf("Neo4j Bolt statement already closed")
+		return nil, errors.New("Neo4j Bolt statement already closed")
 	}
 	if s.rows != nil {
-		return nil, fmt.Errorf("Another query is already open")
+		return nil, errors.New("Another query is already open")
 	}
 
 	respInt, err := s.conn.sendRun(s.query, params)
 	if err != nil {
-		Logger.Printf("An error occurred encoding query: %s", err)
 		return nil, err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Got success message: %#v", resp)
+		log.Infof("Got success message: %#v", resp)
 		s.rows = newRows(s, resp.Metadata)
 		return s.rows, nil
 	default:
-		return nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+		return nil, errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
 	}
 }

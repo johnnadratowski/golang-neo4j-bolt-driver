@@ -3,12 +3,13 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 
+	"reflect"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
-	"reflect"
 )
 
 // Decoder decodes a message from the bolt protocol stream
@@ -45,7 +46,7 @@ func (d Decoder) read() (*bytes.Buffer, error) {
 	for {
 		lengthBytes := make([]byte, 2)
 		if numRead, err := d.r.Read(lengthBytes); numRead != 2 {
-			return nil, fmt.Errorf("Couldn't read expected bytes for message length. Read: %d Expected: 2.  Error: %s", numRead, err)
+			return nil, errors.Wrap(err, "Couldn't read expected bytes for message length. Read: %d Expected: 2.", numRead)
 		}
 
 		// Chunk header contains length of current message
@@ -57,14 +58,14 @@ func (d Decoder) read() (*bytes.Buffer, error) {
 
 		data := make([]byte, messageLen)
 		if numRead, err := d.r.Read(data); numRead != int(messageLen) {
-			return nil, fmt.Errorf("Couldn't read expected bytes for message. Read: %d Expected: %d.  Error: %s", numRead, messageLen, err)
+			return nil, errors.Wrap(err, "Couldn't read expected bytes for message. Read: %d Expected: %d.", numRead, messageLen)
 		}
 
 		numWritten, err := output.Write(data)
 		if numWritten < len(data) {
-			return output, fmt.Errorf("Didn't write full data on output. Expected: %d Wrote: %d", len(data), numWritten)
+			return output, errors.New("Didn't write full data on output. Expected: %d Wrote: %d", len(data), numWritten)
 		} else if err != nil {
-			return output, fmt.Errorf("Error writing data to output: %s", err)
+			return output, errors.Wrap(err, "Error writing data to output")
 		}
 	}
 }
@@ -83,7 +84,7 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 
 	marker, err := buffer.ReadByte()
 	if err != nil {
-		return nil, fmt.Errorf("Error reading marker: %s", err)
+		return nil, errors.Wrap(err, "Error reading marker")
 	}
 
 	// Here we have to get the marker as an int to check and see
@@ -91,7 +92,7 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	var markerInt int8
 	err = binary.Read(bytes.NewBuffer([]byte{marker}), binary.BigEndian, &markerInt)
 	if err != nil {
-		return nil, fmt.Errorf("Error reading marker as int8 from bolt message: %s", err)
+		return nil, errors.Wrap(err, "Error reading marker as int8 from bolt message")
 	}
 
 	switch {
@@ -143,19 +144,19 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	case marker == String8Marker:
 		var size int8
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading string size")
 		}
 		return string(buffer.Next(int(size))), nil
 	case marker == String16Marker:
 		var size int16
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading string size")
 		}
 		return string(buffer.Next(int(size))), nil
 	case marker == String32Marker:
 		var size int32
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading string size")
 		}
 		return string(buffer.Next(int(size))), nil
 
@@ -166,19 +167,19 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	case marker == Slice8Marker:
 		var size int8
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading slice size")
 		}
 		return d.decodeSlice(buffer, int(size))
 	case marker == Slice16Marker:
 		var size int16
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading slice size")
 		}
 		return d.decodeSlice(buffer, int(size))
 	case marker == Slice32Marker:
 		var size int32
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading slice size")
 		}
 		return d.decodeSlice(buffer, int(size))
 
@@ -189,19 +190,19 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	case marker == Map8Marker:
 		var size int8
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading map size")
 		}
 		return d.decodeMap(buffer, int(size))
 	case marker == Map16Marker:
 		var size int16
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading map size")
 		}
 		return d.decodeMap(buffer, int(size))
 	case marker == Map32Marker:
 		var size int32
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading map size")
 		}
 		return d.decodeMap(buffer, int(size))
 
@@ -212,18 +213,18 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	case marker == Map8Marker:
 		var size int8
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading struct size")
 		}
 		return d.decodeStruct(buffer, int(size))
 	case marker == Map16Marker:
 		var size int16
 		if err := binary.Read(buffer, binary.BigEndian, &size); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred reading struct size")
 		}
 		return d.decodeStruct(buffer, int(size))
 
 	default:
-		return nil, fmt.Errorf("Unrecognized marker byte!: %x", marker)
+		return nil, errors.New("Unrecognized marker byte!: %x", marker)
 	}
 
 }
@@ -257,7 +258,7 @@ func (d Decoder) decodeMap(buffer *bytes.Buffer, size int) (map[string]interface
 
 		key, ok := keyInt.(string)
 		if !ok {
-			return nil, fmt.Errorf("Unexpected key type: %T with value %+v", keyInt, keyInt)
+			return nil, errors.New("Unexpected key type: %T with value %+v", keyInt, keyInt)
 		}
 		mapp[key] = val
 	}
@@ -267,10 +268,10 @@ func (d Decoder) decodeMap(buffer *bytes.Buffer, size int) (map[string]interface
 
 func (d Decoder) decodeStruct(buffer *bytes.Buffer, size int) (interface{}, error) {
 
-	// TODO: How to handle size?
+	// TODO: How to handle size? Right now I do nothing
 	signature, err := buffer.ReadByte()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "An error occurred reading struct signature byte")
 	}
 
 	switch signature {
@@ -299,7 +300,7 @@ func (d Decoder) decodeStruct(buffer *bytes.Buffer, size int) (interface{}, erro
 	case messages.ResetMessageSignature:
 		return d.decodeResetMessage(buffer)
 	default:
-		return nil, fmt.Errorf("Unrecognized type decoding struct with signature %x", signature)
+		return nil, errors.New("Unrecognized type decoding struct with signature %x", signature)
 	}
 }
 
@@ -314,7 +315,7 @@ func (d Decoder) decodeNode(buffer *bytes.Buffer) (graph.Node, error) {
 	case int, int8, int16, int32, int64:
 		node.NodeIdentity = reflect.ValueOf(nodeIdentityInt).Int()
 	default:
-		return node, fmt.Errorf("Expected: Node Identity int, but got %T %+v", nodeIdentityInt, nodeIdentityInt)
+		return node, errors.New("Expected: Node Identity int, but got %T %+v", nodeIdentityInt, nodeIdentityInt)
 	}
 
 	labelInt, err := d.decode(buffer)
@@ -323,7 +324,7 @@ func (d Decoder) decodeNode(buffer *bytes.Buffer) (graph.Node, error) {
 	}
 	labelIntSlice, ok := labelInt.([]interface{})
 	if !ok {
-		return node, fmt.Errorf("Expected: Labels []string, but got %T %+v", labelInt, labelInt)
+		return node, errors.New("Expected: Labels []string, but got %T %+v", labelInt, labelInt)
 	}
 	node.Labels, err = sliceInterfaceToString(labelIntSlice)
 	if err != nil {
@@ -336,7 +337,7 @@ func (d Decoder) decodeNode(buffer *bytes.Buffer) (graph.Node, error) {
 	}
 	node.Properties, ok = propertiesInt.(map[string]interface{})
 	if !ok {
-		return node, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
+		return node, errors.New("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
 	}
 
 	return node, nil
@@ -354,7 +355,7 @@ func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, e
 	case int, int8, int16, int32, int64:
 		rel.RelIdentity = reflect.ValueOf(relIdentityInt).Int()
 	default:
-		return rel, fmt.Errorf("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
+		return rel, errors.New("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
 	}
 
 	startNodeIdentityInt, err := d.decode(buffer)
@@ -365,7 +366,7 @@ func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, e
 	case int, int8, int16, int32, int64:
 		rel.StartNodeIdentity = reflect.ValueOf(startNodeIdentityInt).Int()
 	default:
-		return rel, fmt.Errorf("Expected: Start Node Identity int, but got %T %+v", startNodeIdentityInt, startNodeIdentityInt)
+		return rel, errors.New("Expected: Start Node Identity int, but got %T %+v", startNodeIdentityInt, startNodeIdentityInt)
 	}
 
 	endNodeIdentityInt, err := d.decode(buffer)
@@ -376,7 +377,7 @@ func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, e
 	case int, int8, int16, int32, int64:
 		rel.EndNodeIdentity = reflect.ValueOf(endNodeIdentityInt).Int()
 	default:
-		return rel, fmt.Errorf("Expected: End Node Identity int, but got %T %+v", endNodeIdentityInt, endNodeIdentityInt)
+		return rel, errors.New("Expected: End Node Identity int, but got %T %+v", endNodeIdentityInt, endNodeIdentityInt)
 	}
 
 	var ok bool
@@ -386,7 +387,7 @@ func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, e
 	}
 	rel.Type, ok = typeInt.(string)
 	if !ok {
-		return rel, fmt.Errorf("Expected: Type string, but got %T %+v", typeInt, typeInt)
+		return rel, errors.New("Expected: Type string, but got %T %+v", typeInt, typeInt)
 	}
 
 	propertiesInt, err := d.decode(buffer)
@@ -395,7 +396,7 @@ func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, e
 	}
 	rel.Properties, ok = propertiesInt.(map[string]interface{})
 	if !ok {
-		return rel, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
+		return rel, errors.New("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
 	}
 
 	return rel, nil
@@ -410,7 +411,7 @@ func (d Decoder) decodePath(buffer *bytes.Buffer) (graph.Path, error) {
 	}
 	nodesIntSlice, ok := nodesInt.([]interface{})
 	if !ok {
-		return path, fmt.Errorf("Expected: Nodes []Node, but got %T %+v", nodesInt, nodesInt)
+		return path, errors.New("Expected: Nodes []Node, but got %T %+v", nodesInt, nodesInt)
 	}
 	path.Nodes, err = sliceInterfaceToNode(nodesIntSlice)
 	if err != nil {
@@ -423,7 +424,7 @@ func (d Decoder) decodePath(buffer *bytes.Buffer) (graph.Path, error) {
 	}
 	relsIntSlice, ok := relsInt.([]interface{})
 	if !ok {
-		return path, fmt.Errorf("Expected: Relationships []Relationship, but got %T %+v", relsInt, relsInt)
+		return path, errors.New("Expected: Relationships []Relationship, but got %T %+v", relsInt, relsInt)
 	}
 	path.Relationships, err = sliceInterfaceToRelationship(relsIntSlice)
 	if err != nil {
@@ -436,7 +437,7 @@ func (d Decoder) decodePath(buffer *bytes.Buffer) (graph.Path, error) {
 	}
 	seqIntSlice, ok := seqInt.([]interface{})
 	if !ok {
-		return path, fmt.Errorf("Expected: Sequence []int, but got %T %+v", seqInt, seqInt)
+		return path, errors.New("Expected: Sequence []int, but got %T %+v", seqInt, seqInt)
 	}
 	path.Sequence, err = sliceInterfaceToInt(seqIntSlice)
 
@@ -454,7 +455,7 @@ func (d Decoder) decodeUnboundRelationship(buffer *bytes.Buffer) (graph.UnboundR
 	case int, int8, int16, int32, int64:
 		rel.RelIdentity = reflect.ValueOf(relIdentityInt).Int()
 	default:
-		return rel, fmt.Errorf("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
+		return rel, errors.New("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
 	}
 
 	var ok bool
@@ -464,7 +465,7 @@ func (d Decoder) decodeUnboundRelationship(buffer *bytes.Buffer) (graph.UnboundR
 	}
 	rel.Type, ok = typeInt.(string)
 	if !ok {
-		return rel, fmt.Errorf("Expected: Type string, but got %T %+v", typeInt, typeInt)
+		return rel, errors.New("Expected: Type string, but got %T %+v", typeInt, typeInt)
 	}
 
 	propertiesInt, err := d.decode(buffer)
@@ -473,7 +474,7 @@ func (d Decoder) decodeUnboundRelationship(buffer *bytes.Buffer) (graph.UnboundR
 	}
 	rel.Properties, ok = propertiesInt.(map[string]interface{})
 	if !ok {
-		return rel, fmt.Errorf("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
+		return rel, errors.New("Expected: Properties map[string]interface{}, but got %T %+v", propertiesInt, propertiesInt)
 	}
 
 	return rel, nil
@@ -486,7 +487,7 @@ func (d Decoder) decodeRecordMessage(buffer *bytes.Buffer) (messages.RecordMessa
 	}
 	fields, ok := fieldsInt.([]interface{})
 	if !ok {
-		return messages.RecordMessage{}, fmt.Errorf("Expected: Fields []interface{}, but got %T %+v", fieldsInt, fieldsInt)
+		return messages.RecordMessage{}, errors.New("Expected: Fields []interface{}, but got %T %+v", fieldsInt, fieldsInt)
 	}
 
 	return messages.NewRecordMessage(fields), nil
@@ -499,7 +500,7 @@ func (d Decoder) decodeFailureMessage(buffer *bytes.Buffer) (messages.FailureMes
 	}
 	metadata, ok := metadataInt.(map[string]interface{})
 	if !ok {
-		return messages.FailureMessage{}, fmt.Errorf("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
+		return messages.FailureMessage{}, errors.New("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
 	}
 
 	return messages.NewFailureMessage(metadata), nil
@@ -512,7 +513,7 @@ func (d Decoder) decodeIgnoredMessage(buffer *bytes.Buffer) (messages.IgnoredMes
 	}
 	metadata, ok := metadataInt.(map[string]interface{})
 	if !ok {
-		return messages.IgnoredMessage{}, fmt.Errorf("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
+		return messages.IgnoredMessage{}, errors.New("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
 	}
 
 	return messages.NewIgnoredMessage(metadata), nil
@@ -525,7 +526,7 @@ func (d Decoder) decodeSuccessMessage(buffer *bytes.Buffer) (messages.SuccessMes
 	}
 	metadata, ok := metadataInt.(map[string]interface{})
 	if !ok {
-		return messages.SuccessMessage{}, fmt.Errorf("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
+		return messages.SuccessMessage{}, errors.New("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
 	}
 
 	return messages.NewSuccessMessage(metadata), nil

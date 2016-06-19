@@ -2,9 +2,10 @@ package golangNeo4jBoltDriver
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"io"
 
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -56,7 +57,7 @@ func (r *boltRows) Columns() []string {
 
 	fields, ok := fieldsInt.([]string)
 	if !ok {
-		Logger.Printf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
+		log.Errorf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
 		return []string{}
 	}
 
@@ -79,15 +80,14 @@ func (r *boltRows) Close() error {
 
 		respInt, err := r.statement.conn.sendDiscardAll()
 		if err != nil {
-			Logger.Printf("An error occurred discarding messages on row close: %s", err)
-			return fmt.Errorf("An error occurred discarding messages on row close: %s", err)
+			return errors.Wrap(err, "An error occurred discarding messages on row close")
 		}
 
 		switch resp := respInt.(type) {
 		case messages.SuccessMessage:
-			Logger.Printf("Got success message: %#v", resp)
+			log.Infof("Got success message: %#v", resp)
 		default:
-			return fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+			return errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
 		}
 
 	} else if !r.finishedConsume {
@@ -95,8 +95,7 @@ func (r *boltRows) Close() error {
 		// never finished consuming them.
 		_, _, err := r.statement.conn.consumeAll()
 		if err != nil {
-			Logger.Printf("An error occurred clearing out unconsumed stream: %s", err)
-			return fmt.Errorf("An error occurred clearing out unconsumed stream: %s", err)
+			return errors.Wrap(err, "An error occurred clearing out unconsumed stream")
 		}
 	}
 
@@ -108,13 +107,12 @@ func (r *boltRows) Close() error {
 // Next gets the next row result
 func (r *boltRows) Next(dest []driver.Value) error {
 	if r.closed {
-		return fmt.Errorf("Rows are already closed")
+		return errors.New("Rows are already closed")
 	}
 
 	if !r.consumed {
 		r.consumed = true
 		if err := r.statement.conn.sendPullAll(); err != nil {
-			Logger.Printf("An error occurred pulling messages on row close: %s", err)
 			r.finishedConsume = true
 			return err
 		}
@@ -122,17 +120,16 @@ func (r *boltRows) Next(dest []driver.Value) error {
 
 	respInt, err := r.statement.conn.consume()
 	if err != nil {
-		Logger.Printf("An error occurred consuming record: %s", err)
 		return err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Got success message: %#v", resp)
+		log.Infof("Got success message: %#v", resp)
 		r.finishedConsume = true
 		return io.EOF
 	case messages.RecordMessage:
-		Logger.Printf("Got record message: %#v", resp)
+		log.Infof("Got record message: %#v", resp)
 		dest = make([]driver.Value, len(resp.Fields))
 		for i, item := range resp.Fields {
 			dest[i] = item
@@ -140,7 +137,7 @@ func (r *boltRows) Next(dest []driver.Value) error {
 		// TODO: Implement conversion to driver.Value
 		return nil
 	default:
-		return fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+		return errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
 	}
 }
 
@@ -149,13 +146,12 @@ func (r *boltRows) Next(dest []driver.Value) error {
 // and io.EOF
 func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 	if r.closed {
-		return nil, nil, fmt.Errorf("Rows are already closed")
+		return nil, nil, errors.New("Rows are already closed")
 	}
 
 	if !r.consumed {
 		r.consumed = true
 		if err := r.statement.conn.sendPullAll(); err != nil {
-			Logger.Printf("An error occurred pulling messages on row close: %s", err)
 			r.finishedConsume = true
 			return nil, nil, err
 		}
@@ -163,19 +159,18 @@ func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 
 	respInt, err := r.statement.conn.consume()
 	if err != nil {
-		Logger.Printf("An error occurred consuming record: %s", err)
 		return nil, nil, err
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Got success message: %#v", resp)
+		log.Infof("Got success message: %#v", resp)
 		r.finishedConsume = true
 		return nil, resp.Metadata, io.EOF
 	case messages.RecordMessage:
-		Logger.Printf("Got record message: %#v", resp)
+		log.Infof("Got record message: %#v", resp)
 		return resp.Fields, nil, nil
 	default:
-		return nil, nil, fmt.Errorf("Unrecognized response type: %T Value: %#v", resp, resp)
+		return nil, nil, errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
 	}
 }

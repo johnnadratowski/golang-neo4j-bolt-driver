@@ -8,8 +8,13 @@ import (
 	"math"
 )
 
+type test struct {
+	b []byte
+}
+
 func main() {
 
+	fmt.Println("test.b:", len(test{}.b))
 	buf := bytes.NewBuffer([]byte{byte(0xf0)})
 	var x int
 	binary.Read(buf, binary.BigEndian, &x)

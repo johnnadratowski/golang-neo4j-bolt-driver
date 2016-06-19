@@ -1,8 +1,9 @@
 package golangNeo4jBoltDriver
 
 import (
-	"fmt"
 	"reflect"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 )
 
 // Result represents a result from a query that returns no data
@@ -40,7 +41,7 @@ func (r boltResult) LastInsertId() (int64, error) {
 func (r boltResult) RowsAffected() (int64, error) {
 	stats, ok := r.metadata["stats"].(map[string]interface{})
 	if !ok {
-		return -1, fmt.Errorf("Unrecognized type for stats metadata: %#v", r.metadata)
+		return -1, errors.New("Unrecognized type for stats metadata: %#v", r.metadata)
 	}
 
 	var rowsAffected int64
@@ -50,7 +51,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 		case int, int8, int16, int32, int64:
 			rowsAffected += reflect.ValueOf(nodesCreated).Int()
 		default:
-			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", nodesCreated, r.metadata)
+			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", nodesCreated, r.metadata)
 		}
 	}
 
@@ -60,7 +61,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 		case int, int8, int16, int32, int64:
 			rowsAffected += reflect.ValueOf(relsCreated).Int()
 		default:
-			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", relsCreated, r.metadata)
+			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", relsCreated, r.metadata)
 		}
 	}
 
@@ -70,7 +71,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 		case int, int8, int16, int32, int64:
 			rowsAffected += reflect.ValueOf(nodesDeleted).Int()
 		default:
-			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", nodesDeleted, r.metadata)
+			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", nodesDeleted, r.metadata)
 		}
 	}
 
@@ -80,7 +81,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 		case int, int8, int16, int32, int64:
 			rowsAffected += reflect.ValueOf(relsDeleted).Int()
 		default:
-			return -1, fmt.Errorf("Unrecognized type for nodes created: %#v Metadata: %#v", relsDeleted, r.metadata)
+			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", relsDeleted, r.metadata)
 		}
 	}
 

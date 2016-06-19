@@ -3,15 +3,9 @@ package golangNeo4jBoltDriver
 import (
 	"database/sql"
 	"database/sql/driver"
-	"io/ioutil"
-	"log"
 )
 
 var (
-	// Logger is the default logger to use for the driver. Defaults to discarding logs.
-	Logger = log.New(ioutil.Discard, "", log.LstdFlags)
-	// TraceLogger is the low-level debugging logger to use for the driver. Defaults to discarding logs.
-	TraceLogger       = log.New(ioutil.Discard, "", log.LstdFlags)
 	magicPreamble     = []byte{0x60, 0x60, 0xb0, 0x17}
 	supportedVersions = []byte{
 		0x00, 0x00, 0x00, 0x01,

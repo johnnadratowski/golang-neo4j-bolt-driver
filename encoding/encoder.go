@@ -2,11 +2,12 @@ package encoding
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 
 	"bytes"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
 )
 
@@ -100,15 +101,20 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 	length := e.buf.Len()
 	for length >= int(e.chunkSize) {
 		if err := binary.Write(e.w, binary.BigEndian, e.chunkSize); err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "An error occured writing chunksize")
 		}
 
 		numWritten, err := e.w.Write(e.buf.Next(int(e.chunkSize)))
 		// TODO: Probably shouldn't downcast here
-		return numWritten, err
+		return numWritten, errors.Wrap(err, "An error occured writing a chunk")
 	}
 
-	return e.buf.Write(p)
+	n, err = e.buf.Write(p)
+	if err != nil {
+		err = errors.Wrap(err, "An error occurred writing to encoder temp buffer")
+	}
+
+	return n, err
 }
 
 // flush finishes the encoding stream by flushing it to the writer
@@ -116,17 +122,17 @@ func (e Encoder) flush() error {
 	length := e.buf.Len()
 	if length > 0 {
 		if err := binary.Write(e.w, binary.BigEndian, uint16(length)); err != nil {
-			return err
+			return errors.Wrap(err, "An error occured writing length bytes during flush")
 		}
 
 		if _, err := e.buf.WriteTo(e.w); err != nil {
-			return err
+			return errors.Wrap(err, "An error occured writing message bytes during flush")
 		}
 	}
 
 	_, err := e.w.Write(EndMessage)
 	if err != nil {
-		return fmt.Errorf("An error occurred ending encoding message: %s", err)
+		return errors.Wrap(err, "An error occurred ending encoding message")
 	}
 	e.buf.Reset()
 
@@ -181,7 +187,7 @@ func (e Encoder) encode(iVal interface{}) error {
 		// TODO: Bolt docs only mention going up to int64, not uint64
 		// So I'll make this fail for now
 		if val > math.MaxInt64 {
-			return fmt.Errorf("Integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
+			return errors.New("Integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
 		}
 		err = e.encodeInt(int64(val))
 	case float32:
@@ -201,7 +207,7 @@ func (e Encoder) encode(iVal interface{}) error {
 		err = e.encodeMessageStructure(val)
 	default:
 		// TODO: How to handle rune or byte?
-		return fmt.Errorf("Unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
+		return errors.New("Unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
 	}
 
 	return err
@@ -277,7 +283,10 @@ func (e Encoder) encodeInt(val int64) error {
 		// TODO: Should handle uint64? Can bolt handle that?
 		// The highest number from the docs is int64 max
 		// I want to catch the case if I missed it
-		return fmt.Errorf("Int too long to write: %d", val)
+		return errors.New("Int too long to write: %d", val)
+	}
+	if err != nil {
+		return errors.Wrap(err, "An error occured writing an int to bolt")
 	}
 	return err
 }
@@ -287,7 +296,12 @@ func (e Encoder) encodeFloat(val float64) error {
 	if _, err := e.Write([]byte{FloatMarker}); err != nil {
 		return err
 	}
+
 	err := binary.Write(e, binary.BigEndian, val)
+	if err != nil {
+		return errors.Wrap(err, "An error occured writing a float to bolt")
+	}
+
 	return err
 }
 
@@ -322,7 +336,7 @@ func (e Encoder) encodeString(val string) error {
 	default:
 		// TODO: Can this happen? Does go have a limit on the length?
 		// Quick google turned up nothing
-		return fmt.Errorf("String too long to write: %s", val)
+		return errors.New("String too long to write: %s", val)
 	}
 	return err
 }
@@ -349,7 +363,7 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 		}
 	default:
 		// TODO: Can this happen? Does go have a limit on the length?
-		return fmt.Errorf("Slice too long to write: %+v", val)
+		return errors.New("Slice too long to write: %+v", val)
 	}
 
 	// Encode Slice values
@@ -384,7 +398,7 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 		}
 	default:
 		// TODO: Can this happen? Does go have a limit on the length?
-		return fmt.Errorf("Map too long to write: %+v", val)
+		return errors.New("Map too long to write: %+v", val)
 	}
 
 	// Encode Map values
@@ -420,17 +434,17 @@ func (e Encoder) encodeMessageStructure(val structures.MessageStructure) error {
 		}
 	default:
 		// TODO: Can this happen? Does go have a limit on the length?
-		return fmt.Errorf("Structure too long to write: %+v", val)
+		return errors.New("Structure too long to write: %+v", val)
 	}
 
 	_, err := e.Write([]byte{byte(val.Signature())})
 	if err != nil {
-		return fmt.Errorf("An error occurred writing to encoder a struct field: %s", err)
+		return errors.Wrap(err, "An error occurred writing to encoder a struct field")
 	}
 
 	for _, field := range fields {
 		if err := e.encode(field); err != nil {
-			return fmt.Errorf("An error occurred encoding a struct field: %s", err)
+			return errors.Wrap(err, "An error occurred encoding a struct field")
 		}
 	}
 

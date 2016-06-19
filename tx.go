@@ -1,8 +1,8 @@
 package golangNeo4jBoltDriver
 
 import (
-	"fmt"
-
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -26,19 +26,19 @@ func newTx(conn *boltConn) *boltTx {
 // Commit commits and closes the transaction
 func (t *boltTx) Commit() error {
 	if t.closed {
-		return fmt.Errorf("Transaction already closed")
+		return errors.New("Transaction already closed")
 	}
 
 	respInt, err := t.conn.sendRun("COMMIT", nil)
 	if err != nil {
-		return fmt.Errorf("An error occurred committing transaction: %s", err)
+		return errors.Wrap(err, "An error occurred committing transaction")
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Successfully committed transaction: %#v", resp)
+		log.Infof("Successfully committed transaction: %#v", resp)
 	default:
-		err = fmt.Errorf("Unrecognized response type committing transaction: %T Value: %#v", resp, resp)
+		err = errors.New("Unrecognized response type committing transaction: %T Value: %#v", resp, resp)
 	}
 
 	t.conn.transaction = nil
@@ -49,19 +49,19 @@ func (t *boltTx) Commit() error {
 // Rollback rolls back and closes the transaction
 func (t *boltTx) Rollback() error {
 	if t.closed {
-		return fmt.Errorf("Transaction already closed")
+		return errors.New("Transaction already closed")
 	}
 
 	respInt, err := t.conn.sendRun("ROLLBACK", nil)
 	if err != nil {
-		return fmt.Errorf("An error occurred rolling back transaction: %s", err)
+		return errors.Wrap(err, "An error occurred rolling back transaction")
 	}
 
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
-		Logger.Printf("Successfully rollback transaction: %#v", resp)
+		log.Infof("Successfully rollback transaction: %#v", resp)
 	default:
-		err = fmt.Errorf("Unrecognized response type rollback transaction: %T Value: %#v", resp, resp)
+		err = errors.New("Unrecognized response type rollback transaction: %T Value: %#v", resp, resp)
 	}
 
 	t.conn.transaction = nil
