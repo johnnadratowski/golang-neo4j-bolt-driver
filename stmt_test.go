@@ -117,7 +117,6 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 	}
 }
 
-
 func TestBoltStmt_InvalidArgs(t *testing.T) {
 	conn, err := newBoltConn(neo4jConnStr)
 	if err != nil {
@@ -709,4 +708,3 @@ func TestBoltStmt_Exec(t *testing.T) {
 		t.Fatalf("Error closing connection: %s", err)
 	}
 }
-
