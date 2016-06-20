@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"strconv"
+
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 )
 
@@ -489,7 +491,7 @@ func TestBoltStmt_Failure(t *testing.T) {
 	}
 }
 
-func TestBoltStmt_Objects(t *testing.T) {
+func TestBoltStmt_MixedObjects(t *testing.T) {
 	conn, err := newBoltConn(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
@@ -840,19 +842,198 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectStringLimits(t *testing.T) {
-	t.Skip("To Implement")
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	query := `RETURN {a} as a, {b} as b, {c} as c, {d} as d`
+	stmt, err := conn.PrepareNeo(query)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := map[string]interface{}{
+		"a": strings.Repeat("-", 15),
+		"b": strings.Repeat("-", 16),
+		"c": strings.Repeat("-", int(math.MaxUint8)+1),
+		"d": strings.Repeat("-", int(math.MaxUint16)+1),
+	}
+	rows, err := stmt.QueryNeo(params)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if !reflect.DeepEqual(rows.Columns(), []string{"a", "b", "c", "d"}) {
+		t.Fatalf("Unexpected columns. %#v", rows.Columns())
+	}
+
+	if output[0].(string) != params["a"].(string) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["a"], output[0])
+	}
+	if output[1].(string) != params["b"].(string) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["b"], output[1])
+	}
+	if output[2].(string) != params["c"].(string) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["c"], output[2])
+	}
+	if output[3].(string) != params["d"].(string) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["d"], output[3])
+	}
+
+	_, _, err = rows.NextNeo()
+	if err != io.EOF {
+		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SelectSliceLimits(t *testing.T) {
-	t.Skip("To Implement")
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	query := `RETURN {a} as a, {b} as b, {c} as c, {d} as d`
+	stmt, err := conn.PrepareNeo(query)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := map[string]interface{}{
+		"a": make([]interface{}, 15),
+		"b": make([]interface{}, 16),
+		"c": make([]interface{}, int(math.MaxUint8)+1),
+		"d": make([]interface{}, int(math.MaxUint16)+1),
+	}
+	for _, v := range params {
+		for i := range v.([]interface{}) {
+			v.([]interface{})[i] = "-"
+		}
+	}
+
+	rows, err := stmt.QueryNeo(params)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if !reflect.DeepEqual(rows.Columns(), []string{"a", "b", "c", "d"}) {
+		t.Fatalf("Unexpected columns. %#v", rows.Columns())
+	}
+
+	if !reflect.DeepEqual(output[0].([]interface{}), params["a"].([]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["a"], output[0])
+	}
+	if !reflect.DeepEqual(output[1].([]interface{}), params["b"].([]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["b"], output[1])
+	}
+	if !reflect.DeepEqual(output[2].([]interface{}), params["c"].([]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["c"], output[2])
+	}
+	if !reflect.DeepEqual(output[3].([]interface{}), params["d"].([]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["d"], output[3])
+	}
+
+	_, _, err = rows.NextNeo()
+	if err != io.EOF {
+		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SelectMapLimits(t *testing.T) {
-	t.Skip("To Implement")
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	query := `RETURN {a} as a, {b} as b, {c} as c, {d} as d`
+	stmt, err := conn.PrepareNeo(query)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := map[string]interface{}{
+		"a": make(map[string]interface{}, 15),
+		"b": make(map[string]interface{}, 16),
+		"c": make(map[string]interface{}, int(math.MaxUint8)+1),
+		"d": make(map[string]interface{}, int(math.MaxUint16)+1),
+	}
+
+	for i := 0; i < int(math.MaxUint16)+1; i++ {
+		key := strconv.Itoa(i)
+		if i <= 15 {
+			params["a"].(map[string]interface{})[key] = "-"
+		}
+		if i <= 16 {
+			params["b"].(map[string]interface{})[key] = "-"
+		}
+		if i <= int(math.MaxUint8)+1 {
+			params["c"].(map[string]interface{})[key] = "-"
+		}
+		if i <= int(math.MaxUint16)+1 {
+			params["d"].(map[string]interface{})[key] = "-"
+		}
+	}
+
+	rows, err := stmt.QueryNeo(params)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if !reflect.DeepEqual(rows.Columns(), []string{"a", "b", "c", "d"}) {
+		t.Fatalf("Unexpected columns. %#v", rows.Columns())
+	}
+
+	if !reflect.DeepEqual(output[0].(map[string]interface{}), params["a"].(map[string]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["a"], output[0])
+	}
+	if !reflect.DeepEqual(output[1].(map[string]interface{}), params["b"].(map[string]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["b"], output[1])
+	}
+	if !reflect.DeepEqual(output[2].(map[string]interface{}), params["c"].(map[string]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["c"], output[2])
+	}
+	if !reflect.DeepEqual(output[3].(map[string]interface{}), params["d"].(map[string]interface{})) {
+		t.Fatalf("Unexpected output. Expected: %#v Got: %#v", params["d"], output[3])
+	}
+
+	_, _, err = rows.NextNeo()
+	if err != io.EOF {
+		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SelectStructLimits(t *testing.T) {
-	t.Skip("To Implement")
+	t.Skip("Are there any structs that have more than a few fields?")
 }
 
 func TestBoltStmt_ManyChunks(t *testing.T) {
@@ -901,10 +1082,6 @@ func TestBoltStmt_ManyChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
 	}
-}
-
-func TestBoltStmt_Ignored(t *testing.T) {
-	t.Skip("To Implement")
 }
 
 func TestBoltStmt_Transaction(t *testing.T) {

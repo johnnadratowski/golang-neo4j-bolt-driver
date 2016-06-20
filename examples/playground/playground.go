@@ -14,6 +14,8 @@ type test struct {
 
 func main() {
 
+	fmt.Printf("LenMake: %d\n", len(make([]interface{}, 15)))
+
 	fmt.Println("test.b:", len(test{}.b))
 	buf := bytes.NewBuffer([]byte{byte(0xf0)})
 	var x int
