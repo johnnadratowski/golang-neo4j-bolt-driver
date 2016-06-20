@@ -55,13 +55,20 @@ func (r *boltRows) Columns() []string {
 		return []string{}
 	}
 
-	fields, ok := fieldsInt.([]string)
+	fields, ok := fieldsInt.([]interface{})
 	if !ok {
 		log.Errorf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
 		return []string{}
 	}
 
-	return fields
+	fieldsStr := make([]string, len(fields))
+	for i, f := range fields {
+		if fieldsStr[i], ok = f.(string); !ok {
+			log.Errorf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
+			return []string{}
+		}
+	}
+	return fieldsStr
 }
 
 // Metadata Gets all of the metadata returned from Neo on query start

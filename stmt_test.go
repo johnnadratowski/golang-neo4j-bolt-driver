@@ -1,13 +1,13 @@
 package golangNeo4jBoltDriver
 
 import (
-	"fmt"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 	"io"
 	"math"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {
@@ -141,6 +141,92 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 	expected := "Collections containing mixed types can not be stored in properties"
 	if !strings.Contains(err.Error(), expected) {
 		t.Fatalf("Did not recieve expected error: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}
+
+func TestBoltStmt_Exec(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`CREATE (f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}, g: {g}, h: {h}})-[b:BAR]->(c:BAZ)`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := map[string]interface{}{
+		"a": "foo",
+		"b": 1,
+		"c": true,
+		"d": nil,
+		"e": []interface{}{1, 2, 3},
+		"f": 3.4,
+		"g": -1,
+		"h": false,
+	}
+	result, err := stmt.ExecNeo(params)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting rows affected: %s", err)
+	}
+
+	expected := int64(3)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from create node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	}
+
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) SET f.a = "bar";`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing update statement: %s", err)
+	}
+
+	result, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on update query to Neo: %s", err)
+	}
+
+	affected, err = result.RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting update rows affected: %s", err)
+	}
+
+	expected = int64(0)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from update node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	}
+
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO)-[b:BAR]->(c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	result, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	affected, err = result.RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting delete rows affected: %s", err)
+	}
+
+	expected = int64(3)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
 	}
 
 	err = conn.Close()
@@ -533,43 +619,153 @@ func TestBoltStmt_Path(t *testing.T) {
 }
 
 func TestBoltStmt_SingleRel(t *testing.T) {
-	t.Fatalf("To Implement")
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`CREATE (f:FOO)-[b:BAR {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}, g: {g}, h: {h}}]->(c:BAZ) return b`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := map[string]interface{}{
+		"a": "foo",
+		"b": int64(math.MaxInt64),
+		"c": true,
+		"d": nil,
+		"e": []interface{}{int8(1), int8(2), int8(3)},
+		"f": 3.4,
+		"g": int32(math.MaxInt32),
+		"h": false,
+	}
+	rows, err := stmt.QueryNeo(params)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
+
+	if output[0].(graph.Relationship).Properties["a"].(string) != "foo" {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Relationship).Properties["b"].(int64) != math.MaxInt64 {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if !output[0].(graph.Relationship).Properties["c"].(bool) {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Relationship).Properties["d"] != nil {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if !reflect.DeepEqual(output[0].(graph.Relationship).Properties["e"].([]interface{}), []interface{}{int8(1), int8(2), int8(3)}) {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Relationship).Properties["f"].(float64) != 3.4 {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Relationship).Properties["g"].(int32) != math.MaxInt32 {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Relationship).Properties["h"].(bool) {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+
+	// Closing in middle of record stream
+	stmt.Close()
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO)-[b:BAR]->(c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	_, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SingleNode(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
 
-func TestBoltStmt_ManyChunks(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	stmt, err := conn.PrepareNeo(`CREATE (f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}, g: {g}, h: {h}}) return f`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
 
-func TestBoltStmt_SelectStringLimits(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	params := map[string]interface{}{
+		"a": "foo",
+		"b": 1,
+		"c": true,
+		"d": nil,
+		"e": []interface{}{int8(1), int8(2), int8(3)},
+		"f": 3.4,
+		"g": -1,
+		"h": false,
+	}
+	rows, err := stmt.QueryNeo(params)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
 
-func TestBoltStmt_SelectSliceLimits(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred getting next row: %s", err)
+	}
 
-func TestBoltStmt_SelectMapLimits(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	if output[0].(graph.Node).Properties["a"].(string) != "foo" {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Node).Properties["b"].(int8) != 1 {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if !output[0].(graph.Node).Properties["c"].(bool) {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Node).Properties["d"] != nil {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if !reflect.DeepEqual(output[0].(graph.Node).Properties["e"].([]interface{}), []interface{}{int8(1), int8(2), int8(3)}) {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Node).Properties["f"].(float64) != 3.4 {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Node).Properties["g"].(int8) != -1 {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
+	if output[0].(graph.Node).Properties["h"].(bool) {
+		t.Fatalf("Unexpected return data: %#v", output)
+	}
 
-func TestBoltStmt_SelectStructLimits(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	// Closing in middle of record stream
+	stmt.Close()
 
-func TestBoltStmt_Ignored(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) DELETE f`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
 
-func TestBoltStmt_Transaction(t *testing.T) {
-	t.Fatalf("To Implement")
-}
+	_, err = stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
 
-func TestBoltStmt_SqlDriver(t *testing.T) {
-	t.Fatalf("To Implement")
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
 }
 
 func TestBoltStmt_SelectIntLimits(t *testing.T) {
@@ -578,13 +774,23 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
 
-	query := fmt.Sprintf(`RETURN %d, %d, %d, %d, -16, %d, %d, %d, %d`, math.MinInt64, math.MinInt32, math.MinInt16, math.MinInt8, math.MaxInt8, math.MaxInt16, math.MaxInt32, math.MaxInt64)
+	query := `RETURN {min64} as min64, {min32} as min32, {min16} as min16, {min8} as min8, -16, {max8} as max8, {max16} as max16, {max32} as max32, {max64} as max64`
 	stmt, err := conn.PrepareNeo(query)
 	if err != nil {
 		t.Fatalf("An error occurred preparing statement: %s", err)
 	}
 
-	rows, err := stmt.QueryNeo(nil)
+	params := map[string]interface{}{
+		"min64": math.MinInt64,
+		"min32": math.MinInt32,
+		"min16": math.MinInt16,
+		"min8":  math.MinInt8,
+		"max8":  math.MaxInt8,
+		"max16": math.MaxInt16,
+		"max32": math.MaxInt32,
+		"max64": math.MaxInt64,
+	}
+	rows, err := stmt.QueryNeo(params)
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
@@ -633,78 +839,78 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 	}
 }
 
-func TestBoltStmt_Exec(t *testing.T) {
+func TestBoltStmt_SelectStringLimits(t *testing.T) {
+	t.Skip("To Implement")
+}
+
+func TestBoltStmt_SelectSliceLimits(t *testing.T) {
+	t.Skip("To Implement")
+}
+
+func TestBoltStmt_SelectMapLimits(t *testing.T) {
+	t.Skip("To Implement")
+}
+
+func TestBoltStmt_SelectStructLimits(t *testing.T) {
+	t.Skip("To Implement")
+}
+
+func TestBoltStmt_ManyChunks(t *testing.T) {
 	conn, err := newBoltConn(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
 
-	stmt, err := conn.PrepareNeo(`CREATE (f:FOO {a: "foo", b: 1, c: true, d: null, e: [1, 2, 3], f: 3.4, g: -1})`)
+	conn.SetChunkSize(10)
+	query := `RETURN "1 2 3 4 5 6 7 8 9 10" as a,  "1 2 3 4 5 6 7 8 9 10" as b, "1 2 3 4 5 6 7 8 9 10" as c`
+	stmt, err := conn.PrepareNeo(query)
 	if err != nil {
 		t.Fatalf("An error occurred preparing statement: %s", err)
 	}
 
-	result, err := stmt.ExecNeo(nil)
+	rows, err := stmt.QueryNeo(nil)
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
 
-	affected, err := result.RowsAffected()
+	output, _, err := rows.NextNeo()
 	if err != nil {
-		t.Fatalf("Error getting rows affected: %s", err)
+		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	expected := int64(1)
-	if affected != expected {
-		t.Fatalf("Unexpected rows affected from create node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	if !reflect.DeepEqual(rows.Columns(), []string{"a", "b", "c"}) {
+		t.Fatalf("Unexpected columns. %#v", rows.Columns())
 	}
 
-	stmt.Close()
-
-	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) SET f.a = "bar";`)
-	if err != nil {
-		t.Fatalf("An error occurred preparing update statement: %s", err)
+	if output[0].(string) != "1 2 3 4 5 6 7 8 9 10" {
+		t.Fatalf("Unexpected output. %#v", output[0])
+	}
+	if output[1].(string) != "1 2 3 4 5 6 7 8 9 10" {
+		t.Fatalf("Unexpected output. %#v", output[1])
+	}
+	if output[2].(string) != "1 2 3 4 5 6 7 8 9 10" {
+		t.Fatalf("Unexpected output. %#v", output[2])
 	}
 
-	result, err = stmt.ExecNeo(nil)
-	if err != nil {
-		t.Fatalf("An error occurred on update query to Neo: %s", err)
-	}
-
-	affected, err = result.RowsAffected()
-	if err != nil {
-		t.Fatalf("Error getting update rows affected: %s", err)
-	}
-
-	expected = int64(0)
-	if affected != expected {
-		t.Fatalf("Unexpected rows affected from update node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
-	}
-
-	stmt.Close()
-
-	stmt, err = conn.PrepareNeo(`MATCH (f:FOO) DELETE f`)
-	if err != nil {
-		t.Fatalf("An error occurred preparing delete statement: %s", err)
-	}
-
-	result, err = stmt.ExecNeo(nil)
-	if err != nil {
-		t.Fatalf("An error occurred on delete query to Neo: %s", err)
-	}
-
-	affected, err = result.RowsAffected()
-	if err != nil {
-		t.Fatalf("Error getting delete rows affected: %s", err)
-	}
-
-	expected = int64(1)
-	if affected != expected {
-		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	_, _, err = rows.NextNeo()
+	if err != io.EOF {
+		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
 	}
 
 	err = conn.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
 	}
+}
+
+func TestBoltStmt_Ignored(t *testing.T) {
+	t.Skip("To Implement")
+}
+
+func TestBoltStmt_Transaction(t *testing.T) {
+	t.Skip("To Implement")
+}
+
+func TestBoltStmt_SqlDriver(t *testing.T) {
+	t.Skip("To Implement")
 }

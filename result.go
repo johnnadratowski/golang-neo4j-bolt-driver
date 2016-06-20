@@ -55,7 +55,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 		}
 	}
 
-	relsCreated, ok := stats["rel-created"]
+	relsCreated, ok := stats["relationships-created"]
 	if ok {
 		switch relsCreated.(type) {
 		case int, int8, int16, int32, int64:
@@ -75,7 +75,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 		}
 	}
 
-	relsDeleted, ok := stats["rel-deleted"]
+	relsDeleted, ok := stats["relationships-deleted"]
 	if ok {
 		switch relsDeleted.(type) {
 		case int, int8, int16, int32, int64:

@@ -98,6 +98,12 @@ func NewEncoder(w io.Writer, chunkSize uint16) Encoder {
 // write writes to the writer.  Buffers the writes using chunkSize.
 func (e Encoder) Write(p []byte) (n int, err error) {
 
+	n, err = e.buf.Write(p)
+	if err != nil {
+		err = errors.Wrap(err, "An error occurred writing to encoder temp buffer")
+		return n, err
+	}
+
 	length := e.buf.Len()
 	for length >= int(e.chunkSize) {
 		if err := binary.Write(e.w, binary.BigEndian, e.chunkSize); err != nil {
@@ -105,16 +111,14 @@ func (e Encoder) Write(p []byte) (n int, err error) {
 		}
 
 		numWritten, err := e.w.Write(e.buf.Next(int(e.chunkSize)))
-		// TODO: Probably shouldn't downcast here
-		return numWritten, errors.Wrap(err, "An error occured writing a chunk")
+		if err != nil {
+			err = errors.Wrap(err, "An error occured writing a chunk")
+		}
+
+		return numWritten, err
 	}
 
-	n, err = e.buf.Write(p)
-	if err != nil {
-		err = errors.Wrap(err, "An error occurred writing to encoder temp buffer")
-	}
-
-	return n, err
+	return n, nil
 }
 
 // flush finishes the encoding stream by flushing it to the writer
