@@ -1083,11 +1083,3 @@ func TestBoltStmt_ManyChunks(t *testing.T) {
 		t.Fatalf("Error closing connection: %s", err)
 	}
 }
-
-func TestBoltStmt_Transaction(t *testing.T) {
-	t.Skip("To Implement")
-}
-
-func TestBoltStmt_SqlDriver(t *testing.T) {
-	t.Skip("To Implement")
-}

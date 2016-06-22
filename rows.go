@@ -85,7 +85,7 @@ func (r *boltRows) Close() error {
 	if !r.consumed {
 		// Discard all messages if not consumed
 
-		respInt, err := r.statement.conn.sendDiscardAll()
+		respInt, err := r.statement.conn.sendDiscardAllConsume()
 		if err != nil {
 			return errors.Wrap(err, "An error occurred discarding messages on row close")
 		}

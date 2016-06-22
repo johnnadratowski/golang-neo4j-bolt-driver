@@ -105,34 +105,41 @@ func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 		return nil, errors.New("Another query is already open")
 	}
 
-	respInt, err := s.conn.sendRun(s.query, params)
+	successInt, err := s.conn.sendRunConsume(s.query, params)
 	if err != nil {
 		return nil, err
 	}
 
-	switch resp := respInt.(type) {
+	success, ok := successInt.(messages.SuccessMessage)
+	if !ok {
+		return nil, errors.New("Unrecognized response type: %T Value: %#v", success, success)
+
+	}
+
+	log.Infof("Got success message: %#v", success)
+
+	pullInt, err := s.conn.sendPullAllConsume()
+	if err != nil {
+		return nil, err
+	}
+
+	switch metadataResp := pullInt.(type) {
 	case messages.SuccessMessage:
-		log.Infof("Got success message: %#v", resp)
-
-		err := s.conn.sendPullAll()
+		log.Infof("Got success message: %#v", metadataResp)
+		return newResult(metadataResp.Metadata), nil
+	case messages.RecordMessage:
+		_, successInt, err := s.conn.consumeAll()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "An error occurred clearing the stream of records.")
 		}
 
-		metaDataInt, err := s.conn.consume()
-		if err != nil {
-			return nil, err
+		success, ok := successInt.(messages.SuccessMessage)
+		if !ok {
+			return nil, errors.New("Expected success clearing stream during exec query: %#v", success)
 		}
-
-		switch metadataResp := metaDataInt.(type) {
-		case messages.SuccessMessage:
-			log.Infof("Got success message: %#v", metadataResp)
-			return newResult(metadataResp.Metadata), nil
-		default:
-			return nil, errors.New("Unrecognized response type: %T Value: %#v", metadataResp, metadataResp)
-		}
+		return newResult(success.Metadata), nil
 	default:
-		return nil, errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
+		return nil, errors.New("Unrecognized response type: %T Value: %#v", metadataResp, metadataResp)
 	}
 }
 
@@ -162,7 +169,7 @@ func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
 		return nil, errors.New("Another query is already open")
 	}
 
-	respInt, err := s.conn.sendRun(s.query, params)
+	respInt, err := s.conn.sendRunConsume(s.query, params)
 	if err != nil {
 		return nil, err
 	}

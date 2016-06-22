@@ -328,22 +328,32 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 	if c.transaction != nil {
 		return nil, errors.New("An open transaction already exists")
 	}
+	if c.statement != nil {
+		return nil, errors.New("Cannot open a transaction when you already have an open statement")
+	}
 	if c.closed {
 		return nil, errors.New("Connection already closed")
 	}
 
-	respInt, err := c.sendRun("BEGIN", nil)
+	successInt, pullInt, err := c.sendRunPullAllConsume("BEGIN", nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred beginning transaction")
 	}
 
-	switch resp := respInt.(type) {
-	case messages.SuccessMessage:
-		log.Infof("Got success message beginning transaction: %#v", resp)
-		return newTx(c), nil
-	default:
-		return nil, errors.New("Unrecognized response type beginning transaction: %T Value: %#v", resp, resp)
+	if success, ok := successInt.(messages.SuccessMessage); !ok {
+		return nil, errors.New("Unrecognized response type beginning transaction: %T Value: %#v", success, success)
+	} else {
+		log.Infof("Got success message beginning transaction: %#v", success)
 	}
+
+	if pull, ok := pullInt.(messages.SuccessMessage); !ok {
+		return nil, errors.New("Unrecognized response type pulling transaction: %T Value: %#v", pull, pull)
+	} else {
+
+		log.Infof("Got success message pulling transaction: %#v", pull)
+	}
+
+	return newTx(c), nil
 }
 
 // Sets the size of the chunks to write to the stream
@@ -364,6 +374,10 @@ func (c *boltConn) consume() (interface{}, error) {
 		return respInt, err
 	}
 
+	if log.GetLevel() >= log.TraceLevel {
+		log.Tracef("Consumed Response: %#v", respInt)
+	}
+
 	if failure, isFail := respInt.(messages.FailureMessage); isFail {
 		log.Errorf("Got failure message: %#v", failure)
 		err := c.ackFailure(failure)
@@ -372,6 +386,7 @@ func (c *boltConn) consume() (interface{}, error) {
 		}
 		return failure, errors.New("Got failure message: %#v", failure)
 	}
+
 	return respInt, err
 }
 
@@ -405,11 +420,19 @@ func (c *boltConn) sendInit() (interface{}, error) {
 	return c.consume()
 }
 
-func (c *boltConn) sendRun(query string, args map[string]interface{}) (interface{}, error) {
+func (c *boltConn) sendRun(query string, args map[string]interface{}) error {
 	log.Infof("Sending RUN message: query %s (args: %#v)", query, args)
 	runMessage := messages.NewRunMessage(query, args)
 	if err := encoding.NewEncoder(c, c.chunkSize).Encode(runMessage); err != nil {
-		return nil, errors.Wrap(err, "An error occurred running query")
+		return errors.Wrap(err, "An error occurred running query")
+	}
+
+	return nil
+}
+
+func (c *boltConn) sendRunConsume(query string, args map[string]interface{}) (interface{}, error) {
+	if err := c.sendRun(query, args); err != nil {
+		return nil, err
 	}
 
 	return c.consume()
@@ -427,13 +450,39 @@ func (c *boltConn) sendPullAll() error {
 	return nil
 }
 
-func (c *boltConn) sendDiscardAll() (interface{}, error) {
+func (c *boltConn) sendPullAllConsume() (interface{}, error) {
+	if err := c.sendPullAll(); err != nil {
+		return nil, err
+	}
+
+	return c.consume()
+}
+
+func (c *boltConn) sendRunPullAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
+	success ,err := c.sendRunConsume(query, args)
+	if err != nil {
+		return success, nil, err
+	}
+
+	pull, err := c.sendPullAllConsume()
+	return success, pull, err
+}
+
+func (c *boltConn) sendDiscardAll() error {
 	log.Infof("Sending DISCARD_ALL message")
 
 	discardAllMessage := messages.NewDiscardAllMessage()
 	err := encoding.NewEncoder(c, c.chunkSize).Encode(discardAllMessage)
 	if err != nil {
-		return nil, errors.Wrap(err, "An error occurred encoding discard all query")
+		return errors.Wrap(err, "An error occurred encoding discard all query")
+	}
+
+	return nil
+}
+
+func (c *boltConn) sendDiscardAllConsume() (interface{}, error) {
+	if err := c.sendDiscardAll(); err != nil {
+		return nil, err
 	}
 
 	return c.consume()
