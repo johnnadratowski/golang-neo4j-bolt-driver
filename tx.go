@@ -36,7 +36,7 @@ func (t *boltTx) Commit() error {
 		}
 	}
 
-	successInt, pullInt, err := t.conn.sendRunPullAllConsume("COMMIT", nil)
+	successInt, pullInt, err := t.conn.sendRunPullAllConsumeSingle("COMMIT", nil)
 	if err != nil {
 		return errors.Wrap(err, "An error occurred committing transaction")
 	}
@@ -71,7 +71,7 @@ func (t *boltTx) Rollback() error {
 		}
 	}
 
-	successInt, pullInt, err := t.conn.sendRunPullAllConsume("ROLLBACK", nil)
+	successInt, pullInt, err := t.conn.sendRunPullAllConsumeSingle("ROLLBACK", nil)
 	if err != nil {
 		return errors.Wrap(err, "An error occurred rolling back transaction")
 	}

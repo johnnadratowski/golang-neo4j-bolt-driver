@@ -121,7 +121,7 @@ func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 		return nil, errors.New("Another query is already open")
 	}
 
-	runResp, discardResp, err := s.conn.sendRunDiscardAllConsume(s.query, params)
+	runResp, pullResp, _, err := s.conn.sendRunPullAllConsumeAll(s.query, params)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
 
 	log.Infof("Got run success message: %#v", success)
 
-	success, ok = discardResp.(messages.SuccessMessage)
+	success, ok = pullResp.(messages.SuccessMessage)
 	if !ok {
 		return nil, errors.New("Unrecognized response when discarding exec rows: %#v", success)
 	}
@@ -157,7 +157,7 @@ func (s *boltStmt) ExecPipeline(params ...map[string]interface{}) ([]Result, err
 	}
 
 	for i, query := range s.queries {
-		err := s.conn.sendRunDiscardAll(query, params[i])
+		err := s.conn.sendRunPullAll(query, params[i])
 		if err != nil {
 			return nil, errors.Wrap(err, "Error running exec query:\n\n%s\n\nWith Params:\n%#v", query, params[i])
 		}
@@ -177,17 +177,18 @@ func (s *boltStmt) ExecPipeline(params ...map[string]interface{}) ([]Result, err
 			return nil, errors.New("Unexpected response when getting exec query result: %#v", runResp)
 		}
 
+		_, pullResp, err := s.conn.consumeAll()
+		if err != nil {
+			return nil, errors.Wrap(err, "An error occurred getting result of exec discard command: %#v", pullResp)
+		}
+
+		success, ok = pullResp.(messages.SuccessMessage)
+		if !ok {
+			return nil, errors.New("Unexpected response when getting exec query discard result: %#v", pullResp)
+		}
+
 		results[i] = newResult(success.Metadata)
 
-		discardResp, err := s.conn.consume()
-		if err != nil {
-			return nil, errors.Wrap(err, "An error occurred getting result of exec discard command: %#v", discardResp)
-		}
-
-		success, ok = discardResp.(messages.SuccessMessage)
-		if !ok {
-			return nil, errors.New("Unexpected response when getting exec query discard result: %#v", discardResp)
-		}
 	}
 
 	return results, nil

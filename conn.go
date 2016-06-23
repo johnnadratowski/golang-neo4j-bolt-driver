@@ -348,7 +348,7 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 		return nil, errors.New("Connection already closed")
 	}
 
-	successInt, pullInt, err := c.sendRunPullAllConsume("BEGIN", nil)
+	successInt, pullInt, err := c.sendRunPullAllConsumeSingle("BEGIN", nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred beginning transaction")
 	}
@@ -481,7 +481,7 @@ func (c *boltConn) sendRunPullAll(query string, args map[string]interface{}) err
 	return c.sendPullAll()
 }
 
-func (c *boltConn) sendRunPullAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
+func (c *boltConn) sendRunPullAllConsumeSingle(query string, args map[string]interface{}) (interface{}, interface{}, error) {
 	err := c.sendRunPullAll(query, args)
 	if err != nil {
 		return nil, nil, err
@@ -494,6 +494,21 @@ func (c *boltConn) sendRunPullAllConsume(query string, args map[string]interface
 
 	pullSuccess, err := c.consume()
 	return runSuccess, pullSuccess, err
+}
+
+func (c *boltConn) sendRunPullAllConsumeAll(query string, args map[string]interface{}) (interface{}, interface{}, []interface{}, error) {
+	err := c.sendRunPullAll(query, args)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	runSuccess, err := c.consume()
+	if err != nil {
+		return runSuccess, nil, nil, err
+	}
+
+	records, pullSuccess, err := c.consumeAll()
+	return runSuccess, pullSuccess, records, err
 }
 
 func (c *boltConn) sendDiscardAll() error {
@@ -526,16 +541,11 @@ func (c *boltConn) sendRunDiscardAll(query string, args map[string]interface{}) 
 }
 
 func (c *boltConn) sendRunDiscardAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
-	err := c.sendRunDiscardAll(query, args)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	runResp, err := c.consume()
+	runResp, err := c.sendRunConsume(query, args)
 	if err != nil {
 		return runResp, nil, err
 	}
 
-	discardResp, err := c.consume()
+	discardResp, err := c.sendDiscardAllConsume()
 	return runResp, discardResp, err
 }
