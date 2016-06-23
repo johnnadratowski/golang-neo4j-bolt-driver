@@ -30,6 +30,7 @@ import (
 type Conn interface {
 	Prepare(query string) (driver.Stmt, error)
 	PrepareNeo(query string) (Stmt, error)
+	PreparePipeline(query ...string) (PipelineStmt, error)
 	Close() error
 	Begin() (driver.Tx, error)
 	SetChunkSize(uint16)
@@ -312,7 +313,19 @@ func (c *boltConn) PrepareNeo(query string) (Stmt, error) {
 	return c.prepare(query)
 }
 
-func (c *boltConn) prepare(query string) (Stmt, error) {
+// PreparePipeline prepares a new pipeline statement for a query.
+func (c *boltConn) PreparePipeline(queries ...string) (PipelineStmt, error) {
+	if c.statement != nil {
+		return nil, errors.New("An open statement already exists")
+	}
+	if c.closed {
+		return nil, errors.New("Connection already closed")
+	}
+	c.statement = newPipelineStmt(queries, c)
+	return c.statement, nil
+}
+
+func (c *boltConn) prepare(query string) (*boltStmt, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -340,18 +353,19 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 		return nil, errors.Wrap(err, "An error occurred beginning transaction")
 	}
 
-	if success, ok := successInt.(messages.SuccessMessage); !ok {
-		return nil, errors.New("Unrecognized response type beginning transaction: %T Value: %#v", success, success)
-	} else {
-		log.Infof("Got success message beginning transaction: %#v", success)
+	success, ok := successInt.(messages.SuccessMessage)
+	if !ok {
+		return nil, errors.New("Unrecognized response type beginning transaction: %#v", success)
 	}
 
-	if pull, ok := pullInt.(messages.SuccessMessage); !ok {
-		return nil, errors.New("Unrecognized response type pulling transaction: %T Value: %#v", pull, pull)
-	} else {
+	log.Infof("Got success message beginning transaction: %#v", success)
 
-		log.Infof("Got success message pulling transaction: %#v", pull)
+	success, ok = pullInt.(messages.SuccessMessage)
+	if !ok {
+		return nil, errors.New("Unrecognized response type pulling transaction:  %#v", success)
 	}
+
+	log.Infof("Got success message pulling transaction: %#v", success)
 
 	return newTx(c), nil
 }
@@ -458,14 +472,28 @@ func (c *boltConn) sendPullAllConsume() (interface{}, error) {
 	return c.consume()
 }
 
-func (c *boltConn) sendRunPullAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
-	success ,err := c.sendRunConsume(query, args)
+func (c *boltConn) sendRunPullAll(query string, args map[string]interface{}) error {
+	err := c.sendRun(query, args)
 	if err != nil {
-		return success, nil, err
+		return err
 	}
 
-	pull, err := c.sendPullAllConsume()
-	return success, pull, err
+	return c.sendPullAll()
+}
+
+func (c *boltConn) sendRunPullAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
+	err := c.sendRunPullAll(query, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	runSuccess, err := c.consume()
+	if err != nil {
+		return runSuccess, nil, err
+	}
+
+	pullSuccess, err := c.consume()
+	return runSuccess, pullSuccess, err
 }
 
 func (c *boltConn) sendDiscardAll() error {
@@ -486,4 +514,28 @@ func (c *boltConn) sendDiscardAllConsume() (interface{}, error) {
 	}
 
 	return c.consume()
+}
+
+func (c *boltConn) sendRunDiscardAll(query string, args map[string]interface{}) error {
+	err := c.sendRun(query, args)
+	if err != nil {
+		return err
+	}
+
+	return c.sendDiscardAll()
+}
+
+func (c *boltConn) sendRunDiscardAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
+	err := c.sendRunDiscardAll(query, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	runResp, err := c.consume()
+	if err != nil {
+		return runResp, nil, err
+	}
+
+	discardResp, err := c.consume()
+	return runResp, discardResp, err
 }

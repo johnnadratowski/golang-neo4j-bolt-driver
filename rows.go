@@ -11,10 +11,6 @@ import (
 
 // Rows represents results of rows from the DB
 //
-// Implements sql/driver, but also includes its own more neo-friendly interface.
-// Some of the features of this interface implement neo-specific features
-// unavailable in the sql/driver compatible interface
-//
 // Row objects ARE NOT THREAD SAFE.
 // If you want to use multiple go routines with these objects,
 // you should use a driver to create a new conn for each routine.
@@ -25,12 +21,30 @@ type Rows interface {
 	Metadata() map[string]interface{}
 	// Close the rows, flushing any existing datastream
 	Close() error
-	// Next gets the next row result
-	Next([]driver.Value) error
 	// NextNeo gets the next row result
 	// When the rows are completed, returns the success metadata
 	// and io.EOF
 	NextNeo() ([]interface{}, map[string]interface{}, error)
+}
+
+// PipelineRows represents results of a set of rows from the DB
+// when running a pipeline statement.
+//
+// Row objects ARE NOT THREAD SAFE.
+// If you want to use multiple go routines with these objects,
+// you should use a driver to create a new conn for each routine.
+type PipelineRows interface {
+	// Columns Gets the names of the columns in the returned dataset
+	Columns() []string
+	// Metadata Gets all of the metadata returned from Neo on query start
+	Metadata() map[string]interface{}
+	// Close the rows, flushing any existing datastream
+	Close() error
+	// NextPipeline gets the next row result
+	// When the rows are completed, returns the success metadata and the next
+	// set of rows.
+	// When all rows are completed, returns io.EOF
+	NextPipeline() ([]interface{}, map[string]interface{}, PipelineRows, error)
 }
 
 type boltRows struct {
@@ -57,14 +71,14 @@ func (r *boltRows) Columns() []string {
 
 	fields, ok := fieldsInt.([]interface{})
 	if !ok {
-		log.Errorf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
+		log.Errorf("Unrecognized fields from success message: %#v", fieldsInt)
 		return []string{}
 	}
 
 	fieldsStr := make([]string, len(fields))
 	for i, f := range fields {
 		if fieldsStr[i], ok = f.(string); !ok {
-			log.Errorf("Unrecognized fields from success message: %T %#v", fieldsInt, fieldsInt)
+			log.Errorf("Unrecognized fields from success message: %#v", fieldsInt)
 			return []string{}
 		}
 	}
@@ -94,7 +108,7 @@ func (r *boltRows) Close() error {
 		case messages.SuccessMessage:
 			log.Infof("Got success message: %#v", resp)
 		default:
-			return errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
+			return errors.New("Unrecognized response type discarding all rows: Value: %#v", resp)
 		}
 
 	} else if !r.finishedConsume {
@@ -144,7 +158,7 @@ func (r *boltRows) Next(dest []driver.Value) error {
 		// TODO: Implement conversion to driver.Value
 		return nil
 	default:
-		return errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
+		return errors.New("Unrecognized response type getting next sql row:  %#v", resp)
 	}
 }
 
@@ -178,6 +192,47 @@ func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 		log.Infof("Got record message: %#v", resp)
 		return resp.Fields, nil, nil
 	default:
-		return nil, nil, errors.New("Unrecognized response type: %T Value: %#v", resp, resp)
+		return nil, nil, errors.New("Unrecognized response type getting next query row: %#v", resp)
+	}
+}
+
+// NextPipeline gets the next row result
+// When the rows are completed, returns the success metadata and the next
+// set of rows.
+// When all rows are completed, returns io.EOF
+func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, PipelineRows, error) {
+	if r.closed {
+		return nil, nil, nil, errors.New("Rows are already closed")
+	}
+
+	respInt, err := r.statement.conn.consume()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	switch resp := respInt.(type) {
+	case messages.SuccessMessage:
+		log.Infof("Got success message: %#v", resp)
+
+		successResp, err := r.statement.conn.consume()
+		if err == io.EOF {
+			r.finishedConsume = true
+			return nil, nil, nil, err
+		} else if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "An error occurred getting next set of rows from pipeline command: %#v", successResp)
+		}
+
+		success, ok := successResp.(messages.SuccessMessage)
+		if !ok {
+			return nil, nil, nil, errors.New("Unexpected response getting next set of rows from pipeline command: %#v", successResp)
+		}
+
+		r.statement.rows = newRows(r.statement, success.Metadata)
+		return nil, success.Metadata, r.statement.rows, nil
+	case messages.RecordMessage:
+		log.Infof("Got record message: %#v", resp)
+		return resp.Fields, nil, nil, nil
+	default:
+		return nil, nil, nil, errors.New("Unrecognized response type getting next pipeline row: %#v", resp)
 	}
 }

@@ -1,9 +1,9 @@
 package golangNeo4jBoltDriver
 
 import (
-	"testing"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 	"io"
+	"testing"
 )
 
 func TestBoltTx_Commit(t *testing.T) {

@@ -8,7 +8,9 @@ import (
 
 // Tx represents a transaction
 type Tx interface {
+	// Commit commits the transaction
 	Commit() error
+	// Rollback rolls back the transaction
 	Rollback() error
 }
 
@@ -39,18 +41,19 @@ func (t *boltTx) Commit() error {
 		return errors.Wrap(err, "An error occurred committing transaction")
 	}
 
-	if success, ok := successInt.(messages.SuccessMessage); !ok {
-		return errors.New("Unrecognized response type committing transaction: %T Value: %#v", success, success)
-	} else {
-		log.Infof("Got success message committing transaction: %#v", success)
+	success, ok := successInt.(messages.SuccessMessage)
+	if !ok {
+		return errors.New("Unrecognized response type committing transaction: %#v", success)
 	}
 
-	if pull, ok := pullInt.(messages.SuccessMessage); !ok {
-		return errors.New("Unrecognized response type pulling transaction: %T Value: %#v", pull, pull)
-	} else {
+	log.Infof("Got success message committing transaction: %#v", success)
 
-		log.Infof("Got success message pulling transaction: %#v", pull)
+	pull, ok := pullInt.(messages.SuccessMessage)
+	if !ok {
+		return errors.New("Unrecognized response type pulling transaction:  %#v", pull)
 	}
+
+	log.Infof("Got success message pulling transaction: %#v", pull)
 
 	t.conn.transaction = nil
 	t.closed = true
@@ -73,18 +76,19 @@ func (t *boltTx) Rollback() error {
 		return errors.Wrap(err, "An error occurred rolling back transaction")
 	}
 
-	if success, ok := successInt.(messages.SuccessMessage); !ok {
-		return errors.New("Unrecognized response type rolling back transaction: %T Value: %#v", success, success)
-	} else {
-		log.Infof("Got success message rolling back transaction: %#v", success)
+	success, ok := successInt.(messages.SuccessMessage)
+	if !ok {
+		return errors.New("Unrecognized response type rolling back transaction: %#v", success)
 	}
 
-	if pull, ok := pullInt.(messages.SuccessMessage); !ok {
-		return errors.New("Unrecognized response type pulling transaction: %T Value: %#v", pull, pull)
-	} else {
+	log.Infof("Got success message rolling back transaction: %#v", success)
 
-		log.Infof("Got success message pulling transaction: %#v", pull)
+	pull, ok := pullInt.(messages.SuccessMessage)
+	if !ok {
+		return errors.New("Unrecognized response type pulling transaction: %#v", pull)
 	}
+
+	log.Infof("Got success message pulling transaction: %#v", pull)
 
 	t.conn.transaction = nil
 	t.closed = true
