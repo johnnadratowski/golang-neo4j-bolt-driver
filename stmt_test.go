@@ -1083,3 +1083,125 @@ func TestBoltStmt_ManyChunks(t *testing.T) {
 		t.Fatalf("Error closing connection: %s", err)
 	}
 }
+
+func TestBoltStmt_PipelineExec(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmts := []string{
+		"CREATE (f:FOO {a: {a}, b: {b}})",
+		"CREATE (b:BAR {a: {a}, b: {b}})",
+		"CREATE (c:BAZ {a: {a}, b: {b}})",
+	}
+
+	pipeline, err := conn.PreparePipeline(stmts...)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := []map[string]interface{}{
+		map[string]interface{}{
+			"a": 1,
+			"b": "two",
+		},
+		map[string]interface{}{
+			"a": 2,
+			"b": "three",
+		},
+		map[string]interface{}{
+			"a": 3,
+			"b": "four",
+		},
+	}
+	results, err := pipeline.ExecPipeline(params...)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	affected, err := results[0].RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting rows affected: %s", err)
+	}
+	expected := int64(1)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from create node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, results[0].Metadata())
+	}
+	affected, err = results[1].RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting rows affected: %s", err)
+	}
+	expected = int64(1)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from create node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, results[1].Metadata())
+	}
+	affected, err = results[2].RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting rows affected: %s", err)
+	}
+	expected = int64(1)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from create node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, results[2].Metadata())
+	}
+
+	err = pipeline.Close()
+	if err != nil {
+		t.Fatalf("Error closing statement: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`MATCH (f:FOO), (b:BAR), (c:BAZ) return f, b, c;`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing match statement: %s", err)
+	}
+
+	rows, err := stmt.QueryNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on match query to Neo: %s", err)
+	}
+
+	output, _, err := rows.NextNeo()
+	if err != nil {
+		t.Fatalf("An error occurred on getting row: %s", err)
+	}
+
+	if output[0].(graph.Node).Labels[0] != "FOO" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+	if output[1].(graph.Node).Labels[0] != "BAR" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+	if output[2].(graph.Node).Labels[0] != "BAZ" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+
+	stmt.Close()
+	if err != nil {
+		t.Fatalf("Error closing statement: %s", err)
+	}
+
+	stmt, err = conn.PrepareNeo(`MATCH (f:FOO), (b:BAR), (c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	result, err := stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	affected, err = result.RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting delete rows affected: %s", err)
+	}
+
+	expected = int64(3)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}
