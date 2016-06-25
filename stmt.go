@@ -270,7 +270,6 @@ func (s *boltStmt) QueryPipeline(params ...map[string]interface{}) (PipelineRows
 		return nil, errors.New("Got unexpected return message when consuming initial pipeline command: %#v", resp)
 	}
 
-	s.rows = newRows(s, success.Metadata)
-	s.rows.consumed = true // Already consumed from pipeline with PULL_ALL
+	s.rows = newPipelineRows(s, success.Metadata, 0)
 	return s.rows, nil
 }

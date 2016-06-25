@@ -1165,13 +1165,13 @@ func TestBoltStmt_PipelineExec(t *testing.T) {
 		t.Fatalf("An error occurred on getting row: %s", err)
 	}
 
-	if output[0].(graph.Node).Labels[0] != "FOO" {
+	if output[0].(graph.Node).Labels[0] != "FOO" && output[0].(graph.Node).Properties["b"] != int8(1) && output[0].(graph.Node).Properties["a"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if output[1].(graph.Node).Labels[0] != "BAR" {
+	if output[1].(graph.Node).Labels[0] != "BAR" && output[1].(graph.Node).Properties["a"] != int8(2) && output[1].(graph.Node).Properties["b"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if output[2].(graph.Node).Labels[0] != "BAZ" {
+	if output[2].(graph.Node).Labels[0] != "BAZ" && output[2].(graph.Node).Properties["a"] != int8(3) && output[2].(graph.Node).Properties["b"] != "four" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
 
@@ -1196,6 +1196,116 @@ func TestBoltStmt_PipelineExec(t *testing.T) {
 	}
 
 	expected = int64(3)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}
+
+func TestBoltStmt_PipelineQuery(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmts := []string{
+		"CREATE (f:FOO {a: {a}, b: {b}}) RETURN f",
+		"CREATE (b:BAR {a: {a}, b: {b}}) RETURN b",
+		"CREATE (c:BAZ {a: {a}, b: {b}}) RETURN c",
+	}
+
+	pipeline, err := conn.PreparePipeline(stmts...)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := []map[string]interface{}{
+		map[string]interface{}{
+			"a": 1,
+			"b": "two",
+		},
+		map[string]interface{}{
+			"a": 2,
+			"b": "three",
+		},
+		map[string]interface{}{
+			"a": 3,
+			"b": "four",
+		},
+	}
+	rows, err := pipeline.QueryPipeline(params...)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	foo, _, _, err := rows.NextPipeline()
+	if err != nil {
+		t.Fatalf("Error getting foo row: %s", err)
+	}
+
+	_, _, rows, err = rows.NextPipeline()
+	if err != nil {
+		t.Fatalf("Error getting bar rows: %s", err)
+	}
+
+	bar, _, _, err := rows.NextPipeline()
+	if err != nil {
+		t.Fatalf("Error getting bar row: %s", err)
+	}
+
+	_, _, rows, err = rows.NextPipeline()
+	if err != nil {
+		t.Fatalf("Error getting baz rows: %s", err)
+	}
+
+	baz, _, _, err := rows.NextPipeline()
+	if err != nil {
+		t.Fatalf("Error getting baz row: %s", err)
+	}
+
+	_, _, rows, err = rows.NextPipeline()
+	if err != nil {
+		t.Fatalf("Error getting final rows: %s", err)
+	}
+
+	if foo[0].(graph.Node).Labels[0] != "FOO" && foo[0].(graph.Node).Properties["b"] != int8(1) && foo[0].(graph.Node).Properties["a"] != "two" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+	if bar[0].(graph.Node).Labels[0] != "BAR" && bar[0].(graph.Node).Properties["a"] != int8(2) && bar[0].(graph.Node).Properties["b"] != "two" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+	if baz[0].(graph.Node).Labels[0] != "BAZ" && baz[0].(graph.Node).Properties["a"] != int8(3) && baz[0].(graph.Node).Properties["b"] != "four" {
+		t.Fatalf("Unexpected return data: %s", err)
+	}
+	if rows != nil {
+		t.Fatalf("Expected nil rows, got: %#v", rows)
+	}
+
+	err = pipeline.Close()
+	if err != nil {
+		t.Fatalf("Error closing statement: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`MATCH (f:FOO), (b:BAR), (c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	result, err := stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting delete rows affected: %s", err)
+	}
+
+	expected := int64(3)
 	if affected != expected {
 		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
 	}

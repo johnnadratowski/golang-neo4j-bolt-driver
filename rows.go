@@ -53,6 +53,7 @@ type boltRows struct {
 	closed          bool
 	consumed        bool
 	finishedConsume bool
+	pipelineIndex 	int
 }
 
 func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
@@ -62,6 +63,14 @@ func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
 	}
 }
 
+func newPipelineRows(statement *boltStmt, metadata map[string]interface{}, pipelineIndex int) *boltRows {
+	return &boltRows{
+		statement: statement,
+		metadata:  metadata,
+		pipelineIndex: pipelineIndex,
+		consumed: true,  // Already consumed from pipeline with PULL_ALL
+	}
+}
 // Columns returns the columns from the result
 func (r *boltRows) Columns() []string {
 	fieldsInt, ok := r.metadata["fields"]
@@ -98,7 +107,6 @@ func (r *boltRows) Close() error {
 
 	if !r.consumed {
 		// Discard all messages if not consumed
-
 		respInt, err := r.statement.conn.sendDiscardAllConsume()
 		if err != nil {
 			return errors.Wrap(err, "An error occurred discarding messages on row close")
@@ -214,21 +222,26 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 	case messages.SuccessMessage:
 		log.Infof("Got success message: %#v", resp)
 
-		successResp, err := r.statement.conn.consume()
-		if err == io.EOF {
-			r.finishedConsume = true
+		r.finishedConsume = true
+
+		if r.pipelineIndex == len(r.statement.queries) - 1 {
 			return nil, nil, nil, err
-		} else if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "An error occurred getting next set of rows from pipeline command: %#v", successResp)
+		} else {
+			successResp, err := r.statement.conn.consume()
+			if err == io.EOF {
+			} else if err != nil {
+				return nil, nil, nil, errors.Wrap(err, "An error occurred getting next set of rows from pipeline command: %#v", successResp)
+			}
+
+			success, ok := successResp.(messages.SuccessMessage)
+			if !ok {
+				return nil, nil, nil, errors.New("Unexpected response getting next set of rows from pipeline command: %#v", successResp)
+			}
+
+			r.statement.rows = newPipelineRows(r.statement, success.Metadata, r.pipelineIndex+1)
+			return nil, success.Metadata, r.statement.rows, nil
 		}
 
-		success, ok := successResp.(messages.SuccessMessage)
-		if !ok {
-			return nil, nil, nil, errors.New("Unexpected response getting next set of rows from pipeline command: %#v", successResp)
-		}
-
-		r.statement.rows = newRows(r.statement, success.Metadata)
-		return nil, success.Metadata, r.statement.rows, nil
 	case messages.RecordMessage:
 		log.Infof("Got record message: %#v", resp)
 		return resp.Fields, nil, nil, nil
