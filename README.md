@@ -26,6 +26,9 @@ You can get logs from the driver by setting the log level using the `log` packag
 ## Dev Quickstart
 
 ```
+# Put in git hooks
+ln -s ../../scripts/pre-commit .git/hooks/pre-commit
+
 # No special build steps necessary
 go build
 
@@ -41,3 +44,6 @@ The tests are written in an integration testing style.  Most of them are in the 
 * Connection pooling for driver when not using SQL interface
 * Cypher Parser to implement NumInput and pre-flight checking
 * More Tests
+* Benchmark Tests
+* Examples
+* Github CI Integration

@@ -7,8 +7,8 @@ import (
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Rows represents results of rows from the DB
@@ -218,21 +218,21 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 
 		if r.pipelineIndex == len(r.statement.queries)-1 {
 			return nil, nil, nil, err
-		} else {
-			successResp, err := r.statement.conn.consume()
-			if err == io.EOF {
-			} else if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "An error occurred getting next set of rows from pipeline command: %#v", successResp)
-			}
-
-			success, ok := successResp.(messages.SuccessMessage)
-			if !ok {
-				return nil, nil, nil, errors.New("Unexpected response getting next set of rows from pipeline command: %#v", successResp)
-			}
-
-			r.statement.rows = newPipelineRows(r.statement, success.Metadata, r.pipelineIndex+1)
-			return nil, success.Metadata, r.statement.rows, nil
 		}
+
+		successResp, err := r.statement.conn.consume()
+		if err == io.EOF {
+		} else if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "An error occurred getting next set of rows from pipeline command: %#v", successResp)
+		}
+
+		success, ok := successResp.(messages.SuccessMessage)
+		if !ok {
+			return nil, nil, nil, errors.New("Unexpected response getting next set of rows from pipeline command: %#v", successResp)
+		}
+
+		r.statement.rows = newPipelineRows(r.statement, success.Metadata, r.pipelineIndex+1)
+		return nil, success.Metadata, r.statement.rows, nil
 
 	case messages.RecordMessage:
 		log.Infof("Got record message: %#v", resp)

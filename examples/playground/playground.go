@@ -5,9 +5,9 @@ import "fmt"
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
 	"encoding/gob"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
+	"math"
 )
 
 type test struct {
@@ -37,7 +37,6 @@ func main() {
 	}
 
 	fmt.Printf("DECODED: %#v\n", decoded)
-
 
 	buf := &bytes.Buffer{}
 	err = gob.NewEncoder(buf).Encode(args)
