@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"encoding/gob"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 )
 
 type test struct {
@@ -14,10 +16,44 @@ type test struct {
 
 func main() {
 
+	args := map[string]interface{}{
+		"a": 1,
+		"b": 34234.34323,
+		"c": "string",
+		"d": []interface{}{1, 2, 3},
+		"e": true,
+		"f": nil,
+	}
+
+	enc, err := encoding.Marshal(args)
+	if err != nil {
+		fmt.Printf("MARSHALLERR: %#v\n", err)
+	}
+	fmt.Printf("ENCODED: %#v\n", enc)
+
+	decoded, err := encoding.Unmarshal(enc)
+	if err != nil {
+		fmt.Printf("UNMARSHALLERR: %#v\n", err)
+	}
+
+	fmt.Printf("DECODED: %#v\n", decoded)
+
+
+	buf := &bytes.Buffer{}
+	err = gob.NewEncoder(buf).Encode(args)
+	if err != nil {
+		fmt.Printf("GOBERR: %#v", err)
+	}
+
+	var y map[string]interface{}
+	gob.NewDecoder(buf).Decode(&y)
+
+	fmt.Printf("GOB: %#v\n", y)
+
 	fmt.Printf("LenMake: %d\n", len(make([]interface{}, 15)))
 
 	fmt.Println("test.b:", len(test{}.b))
-	buf := bytes.NewBuffer([]byte{byte(0xf0)})
+	buf = bytes.NewBuffer([]byte{byte(0xf0)})
 	var x int
 	binary.Read(buf, binary.BigEndian, &x)
 	fmt.Println("Marker: 0xf0 ", 0xf0, "INT: ", x)
@@ -52,8 +88,8 @@ func main() {
 	fmt.Printf("MAX UINT8: %d\n", math.MaxUint8)
 	fmt.Printf("MAX UINT16: %d\n", math.MaxUint16)
 	fmt.Printf("MAX UINT32: %d\n", math.MaxUint32)
-	y := fmt.Sprint(uint64(math.MaxUint64))
-	fmt.Printf("MAX UINT64: %s\n", y)
+	z := fmt.Sprint(uint64(math.MaxUint64))
+	fmt.Printf("MAX UINT64: %s\n", z)
 
 	fmt.Println("Marker: 0xf0 ", 0xf0, "INT: ", int(byte(0xf0)))
 	fmt.Println("Marker: 0xf0 byte{}", 0xf0, "INT: ", int(0xf0))

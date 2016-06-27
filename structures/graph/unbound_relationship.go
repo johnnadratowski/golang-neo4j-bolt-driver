@@ -16,3 +16,8 @@ type UnboundRelationship struct {
 func (r UnboundRelationship) Signature() int {
 	return UnboundRelationshipSignature
 }
+
+// AllFields gets the fields to encode for the struct
+func (r UnboundRelationship) AllFields() []interface{} {
+	return []interface{}{r.RelIdentity, r.Type, r.Properties}
+}

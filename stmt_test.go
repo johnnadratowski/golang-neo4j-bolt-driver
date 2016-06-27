@@ -9,6 +9,9 @@ import (
 
 	"strconv"
 
+	"database/sql"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 )
 
@@ -1311,6 +1314,129 @@ func TestBoltStmt_PipelineQuery(t *testing.T) {
 	}
 
 	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}
+
+func TestBoltStmt_SqlQuery(t *testing.T) {
+	db, err := sql.Open("neo4j-bolt", neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+	defer db.Close()
+
+	args := map[string]interface{}{
+		"a": 1,
+		"b": 34234.34323,
+		"c": "string",
+		"d": []interface{}{1, 2, 3},
+		"e": true,
+		"f": nil,
+	}
+	arg, err := encoding.Marshal(args)
+	if err != nil {
+		t.Fatalf("An error occurred marshalling args: %s", err)
+	}
+
+	rows, err := db.Query(`CREATE path=(f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}})-[b:BAR]->(c:BAZ) RETURN f.a, f.b, f.c, f.d, f.e, f.f, f, b, path`, arg)
+	if err != nil {
+		t.Fatalf("An error occurred querying statement: %s", err)
+	}
+	var a int
+	var b float64
+	var c string
+	var d []byte
+	var e bool
+	var f interface{}
+	var node []byte
+	var rel []byte
+	var path []byte
+	if !rows.Next() {
+		t.Fatalf("Rows.Next failed")
+	}
+	err = rows.Scan(&a, &b, &c, &d, &e, &f, &node, &rel, &path)
+	if err != nil {
+		t.Fatalf("An error occurred scanning row: %s", err)
+	}
+	defer rows.Close()
+
+	if a != 1 {
+		t.Fatalf("Unexpected value for a. Expected: %#v  Got: %#v", 1, a)
+	}
+	if b != 34234.34323 {
+		t.Fatalf("Unexpected value for b. Expected: %#v  Got: %#v", 34234.34323, b)
+	}
+	if c != "string" {
+		t.Fatalf("Unexpected value for c. Expected: %#v  Got: %#v", "string", b)
+	}
+
+	dVal, err := encoding.Unmarshal(d)
+	if err != nil {
+		t.Fatalf("Error occurred decoding item: %s", err)
+	}
+	if !reflect.DeepEqual(dVal.([]interface{}), []interface{}{int8(1), int8(2), int8(3)}) {
+		t.Fatalf("Unexpected value for d. Expected: %#v  Got: %#v", []interface{}{1, 2, 3}, dVal)
+	}
+
+	if !e {
+		t.Fatalf("Unexpected value for e. Expected: %#v  Got: %#v", true, e)
+	}
+
+	if f != nil {
+		t.Fatalf("Unexpected value for f. Expected: %#v  Got: %#v", nil, f)
+	}
+
+	nodeVal, err := encoding.Unmarshal(node)
+	if err != nil {
+		t.Fatalf("Error occurred decoding node: %s", err)
+	}
+	if nodeVal.(graph.Node).Labels[0] != "FOO" {
+		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", nodeVal)
+	}
+	if nodeVal.(graph.Node).Properties["a"] != int8(1) {
+		t.Fatalf("Unexpected value for node. Expected: %#v  Got: %#v", int8(1), nodeVal)
+	}
+
+	relVal, err := encoding.Unmarshal(rel)
+	if err != nil {
+		t.Fatalf("Error occurred decoding rel: %s", err)
+	}
+	if relVal.(graph.Relationship).Type != "BAR" {
+		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", relVal)
+	}
+
+	pathVal, err := encoding.Unmarshal(path)
+	if err != nil {
+		t.Fatalf("Error occurred decoding path: %s", err)
+	}
+	if pathVal.(graph.Path).Nodes[0].Labels[0] != "FOO" {
+		t.Fatalf("Unexpected label for path node 0. Expected: %#v  Got: %#v", "FOO", pathVal)
+	}
+	if pathVal.(graph.Path).Nodes[1].Labels[0] != "BAZ" {
+		t.Fatalf("Unexpected label for path node 1. Expected: %#v  Got: %#v", "BAZ", pathVal)
+	}
+	if pathVal.(graph.Path).Relationships[0].Type != "BAR" {
+		t.Fatalf("Unexpected label for path relationship 1. Expected: %#v  Got: %#v", "BAR", pathVal)
+	}
+	if pathVal.(graph.Path).Sequence[0] != 1 {
+		t.Fatalf("Unexpected label for path sequence 0. Expected: %#v  Got: %#v", 1, pathVal)
+	}
+
+	result, err := db.Exec(`MATCH (f:FOO)-[b:BAR]->(c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		t.Fatalf("An error occurred getting affected rows: %s", err)
+	}
+	if affected != 3 {
+		t.Fatalf("Expected to delete 3 items, got %#v", affected)
+	}
+
+	err = db.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
 	}

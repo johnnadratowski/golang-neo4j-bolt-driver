@@ -33,6 +33,11 @@ func NewDecoder(r io.Reader) Decoder {
 	}
 }
 
+// Unmarshal is used to marshal an object to the bolt interface encoded bytes
+func Unmarshal(b []byte) (interface{}, error) {
+	return NewDecoder(bytes.NewBuffer(b)).Decode()
+}
+
 // Read out the object bytes to decode
 func (d Decoder) read() (*bytes.Buffer, error) {
 	// TODO: Reset on Error? Close on error?

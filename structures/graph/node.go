@@ -16,3 +16,12 @@ type Node struct {
 func (n Node) Signature() int {
 	return NodeSignature
 }
+
+// AllFields gets the fields to encode for the struct
+func (n Node) AllFields() []interface{} {
+	labels := make([]interface{}, len(n.Labels))
+	for i, label := range n.Labels {
+		labels[i] = label
+	}
+	return []interface{}{n.NodeIdentity, labels, n.Properties}
+}

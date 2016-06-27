@@ -18,3 +18,8 @@ type Relationship struct {
 func (r Relationship) Signature() int {
 	return RelationshipSignature
 }
+
+// AllFields gets the fields to encode for the struct
+func (r Relationship) AllFields() []interface{} {
+	return []interface{}{r.RelIdentity, r.StartNodeIdentity, r.EndNodeIdentity, r.Type, r.Properties}
+}

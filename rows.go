@@ -4,9 +4,11 @@ import (
 	"database/sql/driver"
 	"io"
 
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 )
 
 // Rows represents results of rows from the DB
@@ -53,7 +55,7 @@ type boltRows struct {
 	closed          bool
 	consumed        bool
 	finishedConsume bool
-	pipelineIndex 	int
+	pipelineIndex   int
 }
 
 func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
@@ -65,12 +67,13 @@ func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
 
 func newPipelineRows(statement *boltStmt, metadata map[string]interface{}, pipelineIndex int) *boltRows {
 	return &boltRows{
-		statement: statement,
-		metadata:  metadata,
+		statement:     statement,
+		metadata:      metadata,
 		pipelineIndex: pipelineIndex,
-		consumed: true,  // Already consumed from pipeline with PULL_ALL
+		consumed:      true, // Already consumed from pipeline with PULL_ALL
 	}
 }
+
 // Columns returns the columns from the result
 func (r *boltRows) Columns() []string {
 	fieldsInt, ok := r.metadata["fields"]
@@ -135,39 +138,28 @@ func (r *boltRows) Close() error {
 
 // Next gets the next row result
 func (r *boltRows) Next(dest []driver.Value) error {
-	if r.closed {
-		return errors.New("Rows are already closed")
-	}
-
-	if !r.consumed {
-		r.consumed = true
-		if err := r.statement.conn.sendPullAll(); err != nil {
-			r.finishedConsume = true
-			return err
-		}
-	}
-
-	respInt, err := r.statement.conn.consume()
+	data, _, err := r.NextNeo()
 	if err != nil {
 		return err
 	}
 
-	switch resp := respInt.(type) {
-	case messages.SuccessMessage:
-		log.Infof("Got success message: %#v", resp)
-		r.finishedConsume = true
-		return io.EOF
-	case messages.RecordMessage:
-		log.Infof("Got record message: %#v", resp)
-		dest = make([]driver.Value, len(resp.Fields))
-		for i, item := range resp.Fields {
-			dest[i] = item
+	for i, item := range data {
+		switch item := item.(type) {
+		case []interface{}, map[string]interface{}, graph.Node, graph.Path, graph.Relationship, graph.UnboundRelationship:
+			dest[i], err = encoding.Marshal(item)
+			if err != nil {
+				return err
+			}
+		default:
+			dest[i], err = driver.DefaultParameterConverter.ConvertValue(item)
+			if err != nil {
+				return err
+			}
 		}
-		// TODO: Implement conversion to driver.Value
-		return nil
-	default:
-		return errors.New("Unrecognized response type getting next sql row:  %#v", resp)
 	}
+
+	return nil
+
 }
 
 // NextNeo gets the next row result
@@ -224,7 +216,7 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 
 		r.finishedConsume = true
 
-		if r.pipelineIndex == len(r.statement.queries) - 1 {
+		if r.pipelineIndex == len(r.statement.queries)-1 {
 			return nil, nil, nil, err
 		} else {
 			successResp, err := r.statement.conn.consume()

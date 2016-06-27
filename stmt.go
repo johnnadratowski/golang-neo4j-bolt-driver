@@ -3,6 +3,7 @@ package golangNeo4jBoltDriver
 import (
 	"database/sql/driver"
 
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
@@ -79,31 +80,29 @@ func (s *boltStmt) NumInput() int {
 
 // args turns a driver value list into neo4j query args
 func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
-	if len(args)%2 != 0 {
-		return nil, errors.New("Must pass an even numer of arguments - key then value")
-	}
-
 	output := map[string]interface{}{}
-	for i := 0; i < len(args)-1; i++ {
-		k, ok := args[i].(string)
+	for _, arg := range args {
+		argBytes, ok := arg.([]byte)
 		if !ok {
-			return nil, errors.New("Only support strings for keys. Argument %d was not a string. Got: %#v", i, args[i])
+			return nil, errors.New("You must pass only a gob encoded map to the Exec/Query args")
 		}
-		output[k] = args[i+1].(interface{})
+
+		m, err := encoding.Unmarshal(argBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		for k, v := range m.(map[string]interface{}) {
+			output[k] = v
+		}
+
 	}
 
 	return output, nil
 }
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
-//
-// This implementation does not support positional arguments,  only named arguments.
-// To meet the sql.Driver interface, this translates the args to a map[string]interface{}
-// by taking the even index numbers as keys and the odd index numbers as values. Example:
-//
-// []driver.Value{"key1", "value1", "key2", "value2"}.
-//
-// It is illegal to pass an odd number of arguments.
+// You must bolt encode a map to pass as []bytes for the driver value
 func (s *boltStmt) Exec(args []driver.Value) (driver.Result, error) {
 	params, err := s.args(args)
 	if err != nil {
@@ -195,14 +194,7 @@ func (s *boltStmt) ExecPipeline(params ...map[string]interface{}) ([]Result, err
 }
 
 // Query executes a query that returns data. See sql/driver.Stmt.
-//
-// This implementation does not support positional arguments,  only named arguments.
-// To meet the sql.Driver interface, this translates the args to a map[string]interface{}
-// by taking the even index numbers as keys and the odd index numbers as values. Example:
-//
-// []driver.Value{"key1", "value1", "key2", "value2"}.
-//
-// It is illegal to pass an odd number of arguments.
+// You must bolt encode a map to pass as []bytes for the driver value
 func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
 	params, err := s.args(args)
 	if err != nil {
