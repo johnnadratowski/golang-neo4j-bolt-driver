@@ -23,6 +23,11 @@ Some compromises had to be made in order to support the `sql.driver` interface. 
 You can get logs from the driver by setting the log level using the `log` packages `SetLevel`.
 
 
+## Pipelining
+
+This interface supports message pipelining, which allows for sending a bunch of requests to neo4j to be processed at once.
+You can see [examples of this in the tests](./stmt_test.go#L1090).
+
 ## Dev Quickstart
 
 ```
