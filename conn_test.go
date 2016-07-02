@@ -11,7 +11,7 @@ import (
 )
 
 func TestBoltConn_Close(t *testing.T) {
-	conn, err := newBoltConn(neo4jConnStr)
+	conn, err := NewDriver().OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -21,13 +21,13 @@ func TestBoltConn_Close(t *testing.T) {
 		t.Fatalf("An error occurred closing conn: %s", err)
 	}
 
-	if !conn.closed {
+	if !conn.(*boltConn).closed {
 		t.Errorf("Conn not closed at end of test")
 	}
 }
 
 func TestBoltConn_SelectOne(t *testing.T) {
-	conn, err := newBoltConn(neo4jConnStr)
+	conn, err := NewDriver().OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -68,7 +68,7 @@ func TestBoltConn_SelectOne(t *testing.T) {
 }
 
 func TestBoltConn_PipelineQuery(t *testing.T) {
-	conn, err := newBoltConn(neo4jConnStr)
+	conn, err := NewDriver().OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -297,7 +297,7 @@ func TestBoltConn_SqlQueryAndExec(t *testing.T) {
 }
 
 func TestBoltConn_ExecNeo(t *testing.T) {
-	conn, err := newBoltConn(neo4jConnStr)
+	conn, err := NewDriver().OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -376,7 +376,7 @@ func TestBoltConn_ExecNeo(t *testing.T) {
 }
 
 func TestBoltConn_PipelineExec(t *testing.T) {
-	conn, err := newBoltConn(neo4jConnStr)
+	conn, err := NewDriver().OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}

@@ -42,6 +42,13 @@ type Conn interface {
 	// QueryPipeline queries using the neo4j-specific interface
 	// pipelining multiple statements
 	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
+	// Exec executes using the sql.driver Execer interface
+	Exec(query string, args []driver.Value) (driver.Result, error)
+	// ExecNeo executes a query using the neo4j-specific interface
+	ExecNeo(query string, params map[string]interface{}) (Result, error)
+	// ExecPipeline executes a query using the neo4j-specific interface
+	// pipelining multiple statements
+	ExecPipeline(query []string, params ...map[string]interface{}) ([]Result, error)
 	// Close closes the connection
 	Close() error
 	// Begin starts a new transaction
