@@ -39,5 +39,8 @@ There are some limitations to the types of collections the driver
 supports.  Specifically, maps should always be of type map[string]interface{} and lists should always be of type []interface{}.  It doesn't seem that the Bolt protocol supports
 uint64 either, so the biggest number it can send right now is
 the int64 max.
+
+The URL format is: `bolt://(user):(password)@(host):(port)`
+Schema must be `bolt`. User and password is only necessary if you are authenticating.
 */
 package golangNeo4jBoltDriver

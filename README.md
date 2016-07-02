@@ -19,6 +19,9 @@ As such, these interfaces closely match the `sql.driver` interfaces, but they al
 
 It is recommended that you use the Neo4j Bolt-specific interfaces if possible.  The implementation is more efficient and can more closely support the Neo4j Bolt feature set.
 
+The URL format is: `bolt://(user):(password)@(host):(port)`
+Schema must be `bolt`. User and password is only necessary if you are authenticating.
+
 You can get logs from the driver by setting the log level using the `log` packages `SetLevel`.
 
 
