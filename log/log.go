@@ -23,15 +23,15 @@ const (
 
 var (
 	level = NoneLevel
-	// ErrorLog is the logger for error logging
+	// ErrorLog is the logger for error logging. This can be manually overridden.
 	ErrorLog = l.New(os.Stderr, "[BOLT][ERROR]", l.LstdFlags)
-	// InfoLog is the logger for info logging
+	// InfoLog is the logger for info logging. This can be manually overridden.
 	InfoLog = l.New(os.Stderr, "[BOLT][INFO]", l.LstdFlags)
-	// TraceLog is the logger for trace logging
+	// TraceLog is the logger for trace logging. This can be manually overridden.
 	TraceLog = l.New(os.Stderr, "[BOLT][TRACE]", l.LstdFlags)
 )
 
-// SetLevel sets the logging level of this package
+// SetLevel sets the logging level of this package. levelStr should be one of "trace", "info", or "error
 func SetLevel(levelStr string) {
 	switch strings.ToLower(levelStr) {
 	case "trace":
