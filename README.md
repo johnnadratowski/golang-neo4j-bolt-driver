@@ -9,7 +9,7 @@ go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 
 ## Usage
 
-*_Please see [the statement tests](./stmt_test.go) for example usage_*
+*_Please see [the statement tests](./stmt_test.go) or [the conn tests](./conn_test.go) for example usage_*
 
 *_There is more detailed information in [the godoc](http://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver)_*
 
