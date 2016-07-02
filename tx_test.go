@@ -8,6 +8,10 @@ import (
 
 func TestBoltTx_Commit(t *testing.T) {
 	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltTx_Commit", neo4jConnStr)
+
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
@@ -94,6 +98,10 @@ func TestBoltTx_Commit(t *testing.T) {
 
 func TestBoltTx_Rollback(t *testing.T) {
 	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltTx_Rollback", neo4jConnStr)
+
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)

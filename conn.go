@@ -76,38 +76,34 @@ type boltConn struct {
 	recorder      *recorder
 }
 
-// newBoltConnRecorder Creates a new bolt connection using a recorder
-func newBoltConn(connStr string, recorder *recorder) (*boltConn, error) {
-
-}
-
 // newBoltConn Creates a new bolt connection
-func newBoltConn(connStr string) (*boltConn, error) {
-	url, err := url.Parse(connStr)
-	if err != nil {
-		return nil, errors.Wrap(err, "An error occurred parsing bolt URL")
-	} else if strings.ToLower(url.Scheme) != "bolt" {
-		return nil, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
-	}
+func newBoltConn(connStr string, recorder *recorder) (*boltConn, error) {
 
 	// TODO: TLS Support
 	c := &boltConn{
 		connStr: connStr,
-		url:     url,
 		// TODO: Test best default
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
 		// TODO: Test best default.
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
+		recorder:      recorder,
 	}
 
-	if url.User != nil {
-		c.user = url.User.Username()
-		var isSet bool
-		c.password, isSet = url.User.Password()
-		if !isSet {
-			return nil, errors.New("Must specify password when passing user")
+	var err error
+	if connStr == "" && recorder != nil {
+		c.conn = recorder
+	} else if recorder != nil {
+		recorder.Conn, c.url, c.user, c.password, err = c.createConn()
+		if err != nil {
+			return nil, err
+		}
+		c.conn = recorder
+	} else {
+		c.conn, c.url, c.user, c.password, err = c.createConn()
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -117,6 +113,33 @@ func newBoltConn(connStr string) (*boltConn, error) {
 	}
 
 	return c, nil
+}
+
+func (c *boltConn) createConn() (net.Conn, *url.URL, string, string, error) {
+	user := ""
+	password := ""
+	url, err := url.Parse(c.connStr)
+	if err != nil {
+		return nil, nil, "", "", errors.Wrap(err, "An error occurred parsing bolt URL")
+	} else if strings.ToLower(url.Scheme) != "bolt" {
+		return nil, nil, "", "", errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
+	}
+
+	if url.User != nil {
+		user = url.User.Username()
+		var isSet bool
+		password, isSet = url.User.Password()
+		if !isSet {
+			return nil, nil, "", "", errors.New("Must specify password when passing user")
+		}
+	}
+
+	conn, err := net.DialTimeout("tcp", url.Host, c.timeout)
+	if err != nil {
+		return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+	}
+
+	return conn, url, user, password, nil
 }
 
 func (c *boltConn) handShake() error {
@@ -154,13 +177,8 @@ func (c *boltConn) handShake() error {
 }
 
 func (c *boltConn) initialize() error {
-	var err error
-	c.conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
-	if err != nil {
-		return errors.Wrap(err, "An error occurred dialing to neo4j")
-	}
 
-	if err = c.handShake(); err != nil {
+	if err := c.handShake(); err != nil {
 		if e := c.Close(); e != nil {
 			log.Errorf("An error occurred closing connection: %s", e)
 		}

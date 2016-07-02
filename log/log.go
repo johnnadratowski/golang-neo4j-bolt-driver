@@ -1,7 +1,6 @@
 package log
 
 import (
-	"fmt"
 	l "log"
 	"os"
 	"strings"
@@ -94,32 +93,20 @@ func Errorf(msg string, args ...interface{}) {
 
 // Fatal writes an error log in the format of Fatalln
 func Fatal(args ...interface{}) {
-	if level >= ErrorLevel {
-		ErrorLog.Println(args...)
-		os.Exit(1)
-	}
+	l.Fatalln(args...)
 }
 
 // Fatalf writes an error log in the format of Fatalf
 func Fatalf(msg string, args ...interface{}) {
-	if level >= ErrorLevel {
-		ErrorLog.Printf(msg, args...)
-		os.Exit(1)
-	}
+	l.Fatalf(msg, args...)
 }
 
 // Panic writes an error log in the format of Panicln
 func Panic(args ...interface{}) {
-	if level >= ErrorLevel {
-		ErrorLog.Println(args...)
-		panic(fmt.Sprint(args...))
-	}
+	l.Panicln(args...)
 }
 
 // Panicf writes an error log in the format of Panicf
 func Panicf(msg string, args ...interface{}) {
-	if level >= ErrorLevel {
-		ErrorLog.Printf(msg, args...)
-		panic(fmt.Sprintf(msg, args...))
-	}
+	l.Panicf(msg, args...)
 }
