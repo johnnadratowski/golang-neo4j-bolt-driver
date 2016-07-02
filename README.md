@@ -44,7 +44,6 @@ The tests are written in an integration testing style.  Most of them are in the 
 
 ## TODO
 
-* More convenient Query/Exec methods on conn
 * Connection pooling for driver when not using SQL interface
 * Cypher Parser to implement NumInput and pre-flight checking
 * More Tests
