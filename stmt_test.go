@@ -1270,7 +1270,7 @@ func TestBoltStmt_PipelineQuery(t *testing.T) {
 		t.Fatalf("Error getting baz row: %s", err)
 	}
 
-	_, _, rows, err = rows.NextPipeline()
+	_, _, nextRows, err := rows.NextPipeline()
 	if err != nil {
 		t.Fatalf("Error getting final rows: %s", err)
 	}
@@ -1284,8 +1284,13 @@ func TestBoltStmt_PipelineQuery(t *testing.T) {
 	if baz[0].(graph.Node).Labels[0] != "BAZ" && baz[0].(graph.Node).Properties["a"] != int8(3) && baz[0].(graph.Node).Properties["b"] != "four" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if rows != nil {
+	if nextRows != nil {
 		t.Fatalf("Expected nil rows, got: %#v", rows)
+	}
+
+	err = rows.Close()
+	if err != nil {
+		t.Fatalf("Error closing pipeline rows: %s", err)
 	}
 
 	err = pipeline.Close()
@@ -1319,7 +1324,79 @@ func TestBoltStmt_PipelineQuery(t *testing.T) {
 	}
 }
 
-func TestBoltStmt_PipelineQueryClose(t *testing.T) {
+func TestBoltStmt_PipelineQueryCloseBeginning(t *testing.T) {
+	conn, err := newBoltConn(neo4jConnStr)
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	stmts := []string{
+		"CREATE (f:FOO {a: {a}, b: {b}}) RETURN f",
+		"CREATE (b:BAR {a: {a}, b: {b}}) RETURN b",
+		"CREATE (c:BAZ {a: {a}, b: {b}}) RETURN c",
+	}
+
+	pipeline, err := conn.PreparePipeline(stmts...)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+
+	params := []map[string]interface{}{
+		map[string]interface{}{
+			"a": 1,
+			"b": "two",
+		},
+		map[string]interface{}{
+			"a": 2,
+			"b": "three",
+		},
+		map[string]interface{}{
+			"a": 3,
+			"b": "four",
+		},
+	}
+	rows, err := pipeline.QueryPipeline(params...)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
+
+	err = rows.Close()
+	if err != nil {
+		t.Fatalf("Error closing pipeline rows: %s", err)
+	}
+
+	err = pipeline.Close()
+	if err != nil {
+		t.Fatalf("Error closing statement: %s", err)
+	}
+
+	stmt, err := conn.PrepareNeo(`MATCH (f:FOO), (b:BAR), (c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing delete statement: %s", err)
+	}
+
+	result, err := stmt.ExecNeo(nil)
+	if err != nil {
+		t.Fatalf("An error occurred on delete query to Neo: %s", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		t.Fatalf("Error getting delete rows affected: %s", err)
+	}
+
+	expected := int64(3)
+	if affected != expected {
+		t.Fatalf("Unexpected rows affected from delete node. Expected %#v. Got: %#v. Metadata: %#v", expected, affected, result.Metadata())
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error closing connection: %s", err)
+	}
+}
+
+func TestBoltStmt_PipelineQueryCloseMiddle(t *testing.T) {
 	conn, err := newBoltConn(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
