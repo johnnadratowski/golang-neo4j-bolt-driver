@@ -154,7 +154,7 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 	}
 }
 
-func TestBoltStmt_Exec(t *testing.T) {
+func TestBoltStmt_ExecNeo(t *testing.T) {
 	conn, err := newBoltConn(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
@@ -1482,7 +1482,7 @@ func TestBoltStmt_PipelineQueryCloseMiddle(t *testing.T) {
 	}
 }
 
-func TestBoltStmt_SqlQuery(t *testing.T) {
+func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 	db, err := sql.Open("neo4j-bolt", neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
@@ -1590,7 +1590,14 @@ func TestBoltStmt_SqlQuery(t *testing.T) {
 		t.Fatalf("Unexpected label for path sequence 0. Expected: %#v  Got: %#v", 1, pathVal)
 	}
 
-	result, err := db.Exec(`MATCH (f:FOO)-[b:BAR]->(c:BAZ) DELETE f, b, c`)
+	err = stmt.Close()
+	if err != nil {
+		t.Fatalf("An error occurred closing statement: %s", err)
+	}
+
+	stmt, err = db.Prepare(`MATCH (f:FOO)-[b:BAR]->(c:BAZ) DELETE f, b, c`)
+
+	result, err := stmt.Exec()
 	if err != nil {
 		t.Fatalf("An error occurred preparing delete statement: %s", err)
 	}
@@ -1603,8 +1610,14 @@ func TestBoltStmt_SqlQuery(t *testing.T) {
 		t.Fatalf("Expected to delete 3 items, got %#v", affected)
 	}
 
+	err = stmt.Close()
+	if err != nil {
+		t.Fatalf("An error occurred closing statement: %s", err)
+	}
+
 	err = db.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
 	}
 }
+

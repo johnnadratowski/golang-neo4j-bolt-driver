@@ -636,3 +636,48 @@ func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interfac
 	rows.(*boltRows).closeStatement = true
 	return rows, nil
 }
+
+// Exec executes a query that returns no rows. See sql/driver.Stmt.
+// You must bolt encode a map to pass as []bytes for the driver value
+func (c *boltConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+	if c.statement != nil {
+		return nil, errors.New("An open statement already exists")
+	}
+	if c.closed {
+		return nil, errors.New("Connection already closed")
+	}
+
+	stmt := newStmt(query, c)
+	defer stmt.Close()
+
+	return stmt.Exec(args)
+}
+
+// ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
+func (c *boltConn) ExecNeo(query string, params map[string]interface{}) (Result, error) {
+	if c.statement != nil {
+		return nil, errors.New("An open statement already exists")
+	}
+	if c.closed {
+		return nil, errors.New("Connection already closed")
+	}
+
+	stmt := newStmt(query, c)
+	defer stmt.Close()
+
+	return stmt.ExecNeo(params)
+}
+
+func (c *boltConn) ExecPipeline(queries []string, params ...map[string]interface{}) ([]Result, error) {
+	if c.statement != nil {
+		return nil, errors.New("An open statement already exists")
+	}
+	if c.closed {
+		return nil, errors.New("Connection already closed")
+	}
+
+	stmt := newPipelineStmt(queries, c)
+	defer stmt.Close()
+
+	return stmt.ExecPipeline(params...)
+}
