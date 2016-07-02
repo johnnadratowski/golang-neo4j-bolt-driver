@@ -32,7 +32,11 @@ var (
 // themselves, and any prepared statements/transactions within ARE NOT
 // THREAD SAFE.
 type Driver interface {
+	// Open opens a sql.driver compatible connection. Used internally
+	// by the go sql interface
 	Open(string) (driver.Conn, error)
+	// OpenNeo opens a Neo-specific connection. This should be used
+	// directly when not using the golang sql interface
 	OpenNeo(string) (Conn, error)
 }
 
