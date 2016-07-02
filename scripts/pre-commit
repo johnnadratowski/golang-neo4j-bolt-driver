@@ -63,7 +63,7 @@ go vet ./... || {
     exit 1;
 }
 
-golint ./... || {
+golint -set_exit_status ./... || {
     echo "lint failed"
     exit 1;
 }
