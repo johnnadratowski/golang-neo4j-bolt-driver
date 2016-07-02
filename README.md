@@ -32,6 +32,7 @@ You can see [examples of this in the tests](./stmt_test.go#L1090).
 ```
 # Put in git hooks
 ln -s ../../scripts/pre-commit .git/hooks/pre-commit
+ln -s ../../scripts/pre-push .git/hooks/pre-push
 
 # No special build steps necessary
 go build
