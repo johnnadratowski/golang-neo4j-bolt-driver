@@ -27,6 +27,9 @@ type Rows interface {
 	// When the rows are completed, returns the success metadata
 	// and io.EOF
 	NextNeo() ([]interface{}, map[string]interface{}, error)
+	// All gets all of the results from the row set. It's recommended to use NextNeo when
+	// there are a lot of rows
+	All() ([][]interface{}, map[string]interface{}, error)
 }
 
 // PipelineRows represents results of a set of rows from the DB
@@ -223,6 +226,20 @@ func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 		return resp.Fields, nil, nil
 	default:
 		return nil, nil, errors.New("Unrecognized response type getting next query row: %#v", resp)
+	}
+}
+
+func (r *boltRows) All() ([][]interface{}, map[string]interface{}, error) {
+	output := [][]interface{}{}
+	for {
+		row, metadata, err := r.NextNeo()
+		if err != nil || row == nil {
+			if err == io.EOF {
+				return output, metadata, nil
+			}
+			return output, metadata, err
+		}
+		output = append(output, row)
 	}
 }
 

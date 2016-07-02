@@ -39,6 +39,8 @@ type Conn interface {
 	Query(query string, args []driver.Value) (driver.Rows, error)
 	// QueryNeo queries using the neo4j-specific interface
 	QueryNeo(query string, params map[string]interface{}) (Rows, error)
+	// QueryNeoAll queries using the neo4j-specific interface and returns all row data and output metadata
+	QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error)
 	// QueryPipeline queries using the neo4j-specific interface
 	// pipelining multiple statements
 	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
@@ -640,6 +642,17 @@ func (c *boltConn) Query(query string, args []driver.Value) (driver.Rows, error)
 
 func (c *boltConn) QueryNeo(query string, params map[string]interface{}) (Rows, error) {
 	return c.queryNeo(query, params)
+}
+
+func (c *boltConn) QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
+	rows, err := c.queryNeo(query, params)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer rows.Close()
+
+	data, metadata, err := rows.All()
+	return data, rows.metadata, metadata, err
 }
 
 func (c *boltConn) queryNeo(query string, params map[string]interface{}) (*boltRows, error) {
