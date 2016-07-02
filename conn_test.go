@@ -130,7 +130,7 @@ func TestBoltConn_Ignored(t *testing.T) {
 	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_SelectAll", neo4jConnStr)
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_Ignored", neo4jConnStr)
 
 	conn, _ := driver.OpenNeo(neo4jConnStr)
 	defer conn.Close()
@@ -156,7 +156,7 @@ func TestBoltConn_IgnoredPipeline(t *testing.T) {
 	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_SelectAll", neo4jConnStr)
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_IgnoredPipeline", neo4jConnStr)
 
 	conn, _ := driver.OpenNeo(neo4jConnStr)
 	defer conn.Close()
