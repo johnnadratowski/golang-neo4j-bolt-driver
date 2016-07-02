@@ -431,7 +431,7 @@ func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{},
 
 	responses := make([][]interface{}, mult)
 	successes := make([]interface{}, mult)
-	for i := 0; i < mult; i ++ {
+	for i := 0; i < mult; i++ {
 
 		resp, success, err := c.consumeAll()
 		if err != nil {
