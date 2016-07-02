@@ -302,7 +302,6 @@ func TestBoltConn_ExecNeo(t *testing.T) {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
 
-
 	params := map[string]interface{}{
 		"a": "foo",
 		"b": 1,

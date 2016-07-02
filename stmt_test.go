@@ -1620,4 +1620,3 @@ func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 		t.Fatalf("Error closing connection: %s", err)
 	}
 }
-
