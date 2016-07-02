@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
 
+	"reflect"
+
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"reflect"
 )
 
 // recorder records a given session with Neo4j.
@@ -122,15 +122,7 @@ func (r *recorder) Write(b []byte) (n int, err error) {
 	if r.Conn != nil {
 		numWritten, err := r.Conn.Write(b)
 		if numWritten > 0 {
-			writeBlank := make([]byte, numWritten)
-			// We have to write out blank data, so it's the same every time.
-			// The encoding will be different because of the non-deterministic
-			// nature of map key sort order.  Unfortunately this prevents validating
-			// written data in a recorder
-			for i := 0; i < numWritten; i++ {
-				writeBlank[i] = byte(0x00)
-			}
-			r.record(writeBlank, true)
+			r.record(b[:numWritten], true)
 		}
 
 		if err != nil {
@@ -195,38 +187,65 @@ func (r *recorder) load(name string) error {
 	return json.NewDecoder(file).Decode(&r.events)
 }
 
+func (r *recorder) writeRecording() error {
+	file, err := os.OpenFile("./recordings/"+r.name+".json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0660)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(file).Encode(r.events)
+}
+
+func (r *recorder) eventsEqual(checkEvents []*Event) bool {
+	if len(checkEvents) != len(r.events) {
+		return false
+	}
+
+	for i, event := range r.events {
+		checkEvent := checkEvents[i]
+		if checkEvent.IsWrite != event.IsWrite {
+			return false
+		}
+
+		if reflect.DeepEqual(event.Event, checkEvent.Event) {
+			continue
+		}
+
+		data, err := encoding.Unmarshal(event.Event)
+		if err != nil {
+			log.Panicf("Error marshalling event for checking events for output! %#v", err)
+		}
+
+		checkData, err := encoding.Unmarshal(checkEvent.Event)
+		if err != nil {
+			log.Panicf("Error marshalling checking event for checking events for output! %#v", err)
+		}
+
+		if !reflect.DeepEqual(data, checkData) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (r *recorder) flush() error {
 	file, err := os.OpenFile("./recordings/"+r.name+".json", os.O_RDONLY, 0660)
 	if err != nil {
 		if os.IsNotExist(err) {
-			file, err = os.OpenFile("./recordings/"+r.name+".json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0660)
-			if err != nil {
-				return err
-			}
-			return json.NewEncoder(file).Encode(r.events)
+			return r.writeRecording()
 		}
 
 		return err
 	}
 
-	fileBytes, err := ioutil.ReadAll(file)
+	var checkEvents []*Event
+	err = json.NewDecoder(file).Decode(&checkEvents)
 	if err != nil {
 		return err
 	}
 
-	b := &bytes.Buffer{}
-	err = json.NewEncoder(b).Encode(r.events)
-	if err != nil {
-		return err
-	}
-
-	writeBytes := b.Bytes()
-	if !reflect.DeepEqual(fileBytes, writeBytes) {
-		file, err = os.OpenFile("./recordings/"+r.name+".json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0660)
-		if err != nil {
-			return err
-		}
-		return json.NewEncoder(file).Encode(r.events)
+	if !r.eventsEqual(checkEvents) {
+		return r.writeRecording()
 	}
 
 	return nil
