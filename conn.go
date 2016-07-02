@@ -64,7 +64,8 @@ type Conn interface {
 type boltConn struct {
 	connStr       string
 	url           *url.URL
-	authToken     string
+	user     string
+	password     string
 	conn          net.Conn
 	serverVersion []byte
 	timeout       time.Duration
@@ -83,22 +84,26 @@ func newBoltConn(connStr string) (*boltConn, error) {
 		return nil, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
 
-	authToken := ""
-	if url.User != nil {
-		authToken = url.User.Username()
-	}
 
 	// TODO: TLS Support
 	c := &boltConn{
 		connStr:   connStr,
 		url:       url,
-		authToken: authToken,
 		// TODO: Test best default
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
 		// TODO: Test best default.
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
+	}
+
+	if url.User != nil {
+		c.user = url.User.Username()
+		var isSet bool
+		c.password, isSet = url.User.Password()
+		if !isSet {
+			return nil, errors.New("Must specify password when passing user")
+		}
 	}
 
 	err = c.initialize()
@@ -467,9 +472,9 @@ func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{},
 }
 
 func (c *boltConn) sendInit() (interface{}, error) {
-	log.Infof("Sending INIT Message. ClientID: %s AuthToken: %s", ClientID, c.authToken)
+	log.Infof("Sending INIT Message. ClientID: %s User: %s Password: %s", ClientID, c.user, c.password)
 
-	initMessage := messages.NewInitMessage(ClientID, c.authToken)
+	initMessage := messages.NewInitMessage(ClientID, c.user, c.password)
 	if err := encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
 		return nil, errors.Wrap(err, "An error occurred sending init message")
 	}

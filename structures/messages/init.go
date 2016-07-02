@@ -12,17 +12,17 @@ type InitMessage struct {
 }
 
 // NewInitMessage Gets a new InitMessage struct
-func NewInitMessage(clientName string, credentials string) InitMessage {
+func NewInitMessage(clientName string, user string, password string) InitMessage {
 	var authToken map[string]interface{}
-	if credentials == "" {
+	if user == "" {
 		authToken = map[string]interface{}{
 			"scheme": "none",
 		}
 	} else {
 		authToken = map[string]interface{}{
 			"scheme":      "basic",
-			"principal":   "neo4j",
-			"credentials": credentials,
+			"principal":   user,
+			"credentials": password,
 		}
 	}
 
