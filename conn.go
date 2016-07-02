@@ -31,6 +31,9 @@ type Conn interface {
 	Prepare(query string) (driver.Stmt, error)
 	PrepareNeo(query string) (Stmt, error)
 	PreparePipeline(query ...string) (PipelineStmt, error)
+	Query(query string, args []driver.Value) (driver.Rows, error)
+	QueryNeo(query string, params map[string]interface{}) (Rows, error)
+	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
 	Close() error
 	Begin() (driver.Tx, error)
 	SetChunkSize(uint16)
@@ -423,6 +426,25 @@ func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
 	}
 }
 
+func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{}, error) {
+	log.Info("Consuming all responses %d times until success/failure", mult)
+
+	responses := make([][]interface{}, mult)
+	successes := make([]interface{}, mult)
+	for i := 0; i < mult; i ++ {
+
+		resp, success, err := c.consumeAll()
+		if err != nil {
+			return responses, successes, err
+		}
+
+		responses[i] = resp
+		successes[i] = success
+	}
+
+	return responses, successes, nil
+}
+
 func (c *boltConn) sendInit() (interface{}, error) {
 	log.Infof("Sending INIT Message. ClientID: %s AuthToken: %s", ClientID, c.authToken)
 
@@ -479,6 +501,15 @@ func (c *boltConn) sendRunPullAll(query string, args map[string]interface{}) err
 	}
 
 	return c.sendPullAll()
+}
+
+func (c *boltConn) sendRunPullAllConsumeRun(query string, args map[string]interface{}) (interface{}, error) {
+	err := c.sendRunPullAll(query, args)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.consume()
 }
 
 func (c *boltConn) sendRunPullAllConsumeSingle(query string, args map[string]interface{}) (interface{}, interface{}, error) {
@@ -548,4 +579,55 @@ func (c *boltConn) sendRunDiscardAllConsume(query string, args map[string]interf
 
 	discardResp, err := c.sendDiscardAllConsume()
 	return runResp, discardResp, err
+}
+
+func (c *boltConn) Query(query string, args []driver.Value) (driver.Rows, error) {
+	params, err := driverArgsToMap(args)
+	if err != nil {
+		return nil, err
+	}
+	return c.queryNeo(query, params)
+}
+
+func (c *boltConn) QueryNeo(query string, params map[string]interface{}) (Rows, error) {
+	return c.queryNeo(query, params)
+}
+
+func (c *boltConn) queryNeo(query string, params map[string]interface{}) (*boltRows, error) {
+	if c.statement != nil {
+		return nil, errors.New("An open statement already exists")
+	}
+	if c.closed {
+		return nil, errors.New("Connection already closed")
+	}
+
+	c.statement = newStmt(query, c)
+
+	// Pipeline the run + pull all for this
+	successResp, err := c.sendRunPullAllConsumeRun(c.statement.query, params)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := successResp.(messages.SuccessMessage)
+	if !ok {
+		return nil, errors.New("Unexpected response querying neo from connection: %#v", successResp)
+	}
+
+	c.statement.rows = newQueryRows(c.statement, success.Metadata)
+	return c.statement.rows, nil
+}
+
+func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interface{}) (PipelineRows, error) {
+	if c.statement != nil {
+		return nil, errors.New("An open statement already exists")
+	}
+	if c.closed {
+		return nil, errors.New("Connection already closed")
+	}
+	if len(params) != len(queries) {
+		return nil, errors.New("Must pass same number of params as there are queries")
+	}
+
+	c.statement = newPipelineStmt(queries, c)
+	return c.statement.QueryPipeline(params...)
 }

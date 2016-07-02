@@ -56,6 +56,7 @@ type boltRows struct {
 	consumed        bool
 	finishedConsume bool
 	pipelineIndex   int
+	closeStatement  bool
 }
 
 func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
@@ -65,13 +66,24 @@ func newRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
 	}
 }
 
+func newQueryRows(statement *boltStmt, metadata map[string]interface{}) *boltRows {
+	rows := newRows(statement, metadata)
+	rows.consumed = true       // Already consumed from pipeline with PULL_ALL
+	rows.closeStatement = true // Query rows don't expose a statement, so they need to close the statement when they close
+	return rows
+}
+
 func newPipelineRows(statement *boltStmt, metadata map[string]interface{}, pipelineIndex int) *boltRows {
-	return &boltRows{
-		statement:     statement,
-		metadata:      metadata,
-		pipelineIndex: pipelineIndex,
-		consumed:      true, // Already consumed from pipeline with PULL_ALL
-	}
+	rows := newRows(statement, metadata)
+	rows.consumed = true // Already consumed from pipeline with PULL_ALL
+	rows.pipelineIndex = pipelineIndex
+	return rows
+}
+
+func newQueryPipelineRows(statement *boltStmt, metadata map[string]interface{}, pipelineIndex int) *boltRows {
+	rows := newPipelineRows(statement, metadata, pipelineIndex)
+	rows.closeStatement = true // Query rows don't expose a statement, so they need to close the statement when they close
+	return rows
 }
 
 // Columns returns the columns from the result
@@ -123,9 +135,18 @@ func (r *boltRows) Close() error {
 		}
 
 	} else if !r.finishedConsume {
+		// If this is a pipeline statement, we need to "consume all" multiple times
+		numConsume := 1
+		if r.statement.queries != nil {
+			numQueries := len(r.statement.queries)
+			if numQueries > 0 {
+				numConsume = r.pipelineIndex - numQueries - 1
+			}
+		}
+
 		// Clear out all unconsumed messages if we
 		// never finished consuming them.
-		_, _, err := r.statement.conn.consumeAll()
+		_, _, err := r.statement.conn.consumeAllMultiple(numConsume)
 		if err != nil {
 			return errors.Wrap(err, "An error occurred clearing out unconsumed stream")
 		}
@@ -133,6 +154,10 @@ func (r *boltRows) Close() error {
 
 	r.closed = true
 	r.statement.rows = nil
+
+	if r.closeStatement {
+		return r.statement.Close()
+	}
 	return nil
 }
 
@@ -232,6 +257,7 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 		}
 
 		r.statement.rows = newPipelineRows(r.statement, success.Metadata, r.pipelineIndex+1)
+		r.statement.rows.closeStatement = r.closeStatement
 		return nil, success.Metadata, r.statement.rows, nil
 
 	case messages.RecordMessage:

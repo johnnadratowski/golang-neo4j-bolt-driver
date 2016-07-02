@@ -3,7 +3,6 @@ package golangNeo4jBoltDriver
 import (
 	"database/sql/driver"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
@@ -78,33 +77,10 @@ func (s *boltStmt) NumInput() int {
 	return -1 // TODO: Not sure if we should disable this
 }
 
-// args turns a driver value list into neo4j query args
-func (s *boltStmt) args(args []driver.Value) (map[string]interface{}, error) {
-	output := map[string]interface{}{}
-	for _, arg := range args {
-		argBytes, ok := arg.([]byte)
-		if !ok {
-			return nil, errors.New("You must pass only a gob encoded map to the Exec/Query args")
-		}
-
-		m, err := encoding.Unmarshal(argBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		for k, v := range m.(map[string]interface{}) {
-			output[k] = v
-		}
-
-	}
-
-	return output, nil
-}
-
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
 // You must bolt encode a map to pass as []bytes for the driver value
 func (s *boltStmt) Exec(args []driver.Value) (driver.Result, error) {
-	params, err := s.args(args)
+	params, err := driverArgsToMap(args)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +172,7 @@ func (s *boltStmt) ExecPipeline(params ...map[string]interface{}) ([]Result, err
 // Query executes a query that returns data. See sql/driver.Stmt.
 // You must bolt encode a map to pass as []bytes for the driver value
 func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
-	params, err := s.args(args)
+	params, err := driverArgsToMap(args)
 	if err != nil {
 		return nil, err
 	}
