@@ -1370,7 +1370,6 @@ func TestBoltStmt_PipelineQueryClose(t *testing.T) {
 		t.Fatalf("Error closing pipeline rows: %s", err)
 	}
 
-
 	if foo[0].(graph.Node).Labels[0] != "FOO" && foo[0].(graph.Node).Properties["b"] != int8(1) && foo[0].(graph.Node).Properties["a"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
