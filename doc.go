@@ -1,4 +1,5 @@
 /*
+Package golangNeo4jBoltDriver
 This package implements a driver for the Neo4J Bolt Protocol.
 
 The driver is compatible with Golang's sql.driver interface, but
@@ -36,5 +37,5 @@ There are some limitations to the types of collections the driver
 supports.  Specifically, maps should always be of type map[string]interface{} and lists should always be of type []interface{}.  It doesn't seem that the Bolt protocol supports
 uint64 either, so the biggest number it can send right now is
 the int64 max.
- */
+*/
 package golangNeo4jBoltDriver
