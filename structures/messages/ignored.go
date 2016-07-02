@@ -6,7 +6,7 @@ const (
 )
 
 // IgnoredMessage Represents an IGNORED message
-type IgnoredMessage struct {}
+type IgnoredMessage struct{}
 
 // NewIgnoredMessage Gets a new IgnoredMessage struct
 func NewIgnoredMessage() IgnoredMessage {
