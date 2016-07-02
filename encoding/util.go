@@ -3,7 +3,6 @@ package encoding
 import (
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
-	"reflect"
 )
 
 func sliceInterfaceToString(from []interface{}) ([]string, error) {
@@ -21,12 +20,7 @@ func sliceInterfaceToString(from []interface{}) ([]string, error) {
 func sliceInterfaceToInt(from []interface{}) ([]int, error) {
 	to := make([]int, len(from))
 	for idx, item := range from {
-		switch item.(type) {
-		case int, int8, int16, int32, int64:
-			to[idx] = int(reflect.ValueOf(item).Int())
-		default:
-			return to, errors.New("Unrecognized type for int: %d", item)
-		}
+		to[idx] = int(item.(int64))
 	}
 	return to, nil
 }

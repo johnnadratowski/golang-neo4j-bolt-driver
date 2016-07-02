@@ -5,8 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 
-	"reflect"
-
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
@@ -115,23 +113,23 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 	// INT
 	// TODO: Keep data types or cast to int/int64?
 	case markerInt >= -16 && markerInt <= 127:
-		return int8(marker), nil
+		return int64(int8(marker)), nil
 	case marker == Int8Marker:
 		var out int8
 		err := binary.Read(buffer, binary.BigEndian, &out)
-		return out, err
+		return int64(out), err
 	case marker == Int16Marker:
 		var out int16
 		err := binary.Read(buffer, binary.BigEndian, &out)
-		return out, err
+		return int64(out), err
 	case marker == Int32Marker:
 		var out int32
 		err := binary.Read(buffer, binary.BigEndian, &out)
-		return out, err
+		return int64(out), err
 	case marker == Int64Marker:
 		var out int64
 		err := binary.Read(buffer, binary.BigEndian, &out)
-		return out, err
+		return int64(out), err
 
 	// FLOAT
 	case marker == FloatMarker:
@@ -316,12 +314,7 @@ func (d Decoder) decodeNode(buffer *bytes.Buffer) (graph.Node, error) {
 	if err != nil {
 		return node, err
 	}
-	switch nodeIdentityInt.(type) {
-	case int, int8, int16, int32, int64:
-		node.NodeIdentity = reflect.ValueOf(nodeIdentityInt).Int()
-	default:
-		return node, errors.New("Expected: Node Identity int, but got %T %+v", nodeIdentityInt, nodeIdentityInt)
-	}
+	node.NodeIdentity = nodeIdentityInt.(int64)
 
 	labelInt, err := d.decode(buffer)
 	if err != nil {
@@ -356,34 +349,19 @@ func (d Decoder) decodeRelationship(buffer *bytes.Buffer) (graph.Relationship, e
 	if err != nil {
 		return rel, err
 	}
-	switch relIdentityInt.(type) {
-	case int, int8, int16, int32, int64:
-		rel.RelIdentity = reflect.ValueOf(relIdentityInt).Int()
-	default:
-		return rel, errors.New("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
-	}
+	rel.RelIdentity = relIdentityInt.(int64)
 
 	startNodeIdentityInt, err := d.decode(buffer)
 	if err != nil {
 		return rel, err
 	}
-	switch startNodeIdentityInt.(type) {
-	case int, int8, int16, int32, int64:
-		rel.StartNodeIdentity = reflect.ValueOf(startNodeIdentityInt).Int()
-	default:
-		return rel, errors.New("Expected: Start Node Identity int, but got %T %+v", startNodeIdentityInt, startNodeIdentityInt)
-	}
+	rel.StartNodeIdentity = startNodeIdentityInt.(int64)
 
 	endNodeIdentityInt, err := d.decode(buffer)
 	if err != nil {
 		return rel, err
 	}
-	switch endNodeIdentityInt.(type) {
-	case int, int8, int16, int32, int64:
-		rel.EndNodeIdentity = reflect.ValueOf(endNodeIdentityInt).Int()
-	default:
-		return rel, errors.New("Expected: End Node Identity int, but got %T %+v", endNodeIdentityInt, endNodeIdentityInt)
-	}
+	rel.EndNodeIdentity = endNodeIdentityInt.(int64)
 
 	var ok bool
 	typeInt, err := d.decode(buffer)
@@ -456,12 +434,7 @@ func (d Decoder) decodeUnboundRelationship(buffer *bytes.Buffer) (graph.UnboundR
 	if err != nil {
 		return rel, err
 	}
-	switch relIdentityInt.(type) {
-	case int, int8, int16, int32, int64:
-		rel.RelIdentity = reflect.ValueOf(relIdentityInt).Int()
-	default:
-		return rel, errors.New("Expected: Rel Identity int, but got %T %+v", relIdentityInt, relIdentityInt)
-	}
+	rel.RelIdentity = relIdentityInt.(int64)
 
 	var ok bool
 	typeInt, err := d.decode(buffer)

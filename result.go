@@ -1,10 +1,6 @@
 package golangNeo4jBoltDriver
 
-import (
-	"reflect"
-
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-)
+import "github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 
 // Result represents a result from a query that returns no data
 type Result interface {
@@ -52,42 +48,22 @@ func (r boltResult) RowsAffected() (int64, error) {
 	var rowsAffected int64
 	nodesCreated, ok := stats["nodes-created"]
 	if ok {
-		switch nodesCreated.(type) {
-		case int, int8, int16, int32, int64:
-			rowsAffected += reflect.ValueOf(nodesCreated).Int()
-		default:
-			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", nodesCreated, r.metadata)
-		}
+		rowsAffected += nodesCreated.(int64)
 	}
 
 	relsCreated, ok := stats["relationships-created"]
 	if ok {
-		switch relsCreated.(type) {
-		case int, int8, int16, int32, int64:
-			rowsAffected += reflect.ValueOf(relsCreated).Int()
-		default:
-			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", relsCreated, r.metadata)
-		}
+		rowsAffected += relsCreated.(int64)
 	}
 
 	nodesDeleted, ok := stats["nodes-deleted"]
 	if ok {
-		switch nodesDeleted.(type) {
-		case int, int8, int16, int32, int64:
-			rowsAffected += reflect.ValueOf(nodesDeleted).Int()
-		default:
-			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", nodesDeleted, r.metadata)
-		}
+		rowsAffected += nodesDeleted.(int64)
 	}
 
 	relsDeleted, ok := stats["relationships-deleted"]
 	if ok {
-		switch relsDeleted.(type) {
-		case int, int8, int16, int32, int64:
-			rowsAffected += reflect.ValueOf(relsDeleted).Int()
-		default:
-			return -1, errors.New("Unrecognized type for nodes created: %#v Metadata: %#v", relsDeleted, r.metadata)
-		}
+		rowsAffected += relsDeleted.(int64)
 	}
 
 	return rowsAffected, nil

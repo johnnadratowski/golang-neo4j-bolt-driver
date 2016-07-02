@@ -27,7 +27,11 @@ you can maximize your throughput.
 
 The sql driver is registered as "neo4j-bolt". The sql.driver interface is much more limited than what bolt and neo4j supports.  In some cases, concessions were made in order to make that interface work with the neo4j way of doing things.  The main instance of this is the marshalling of objects to/from the sql.driver.Value interface.  In order to support object types that aren't supported by this interface, the internal encoding package is used to marshal these objects to byte strings. This ultimately makes for a less efficient and more 'clunky' implementation.  A glaring instance of this is passing parameters.  Neo4j expects named parameters but the driver interface can only really support positional parameters. To get around this, the user must create a map[string]interface{} of their parameters and marshal it to a driver.Value using the encoding.Marshal function. Similarly, the user must unmarshal data returned from the queries using the encoding.Unmarshal function, then use type assertions to retrieve the proper type.
 
-In most cases the driver will return the data from neo as the proper go-specific types.  These types are very specific and will be returned with the minimum amount of bytes necessary, as this is how they are encoded in the driver.  For example, if you sent a number that's an integer but it has a value of '1', it will come back as an int8, as that's the lowest number of bytes that need to be sent over the line.  The user is expected to cast them as necessary.
+In most cases the driver will return the data from neo as the proper go-specific types.  For integers they always come back
+as int64 and floats always come back as float64.  This is for the
+convenience of the user and acts similarly to go's JSON interface. This prevents the user from having to use reflection to get
+these values.  Internally, the types are always transmitted over
+the wire with as few bytes as possible.
 
 There are also cases where no go-specific type matches the returned values, such as when you query for a node, relationship, or path.  The driver exposes specific structs which represent this data in the 'structures.graph' package. There are 4 types - Node, Relationship, UnboundRelationship, and Path.  The driver returns interface{} objects which must have their types properly asserted to get the data out.
 

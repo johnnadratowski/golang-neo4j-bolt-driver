@@ -49,7 +49,7 @@ func TestBoltConn_SelectOne(t *testing.T) {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	if output[0].(int8) != 1 {
+	if output[0].(int64) != 1 {
 		t.Fatalf("Unexpected output. Expected 1. Got: %d", output)
 	}
 
@@ -129,13 +129,13 @@ func TestBoltConn_PipelineQuery(t *testing.T) {
 		t.Fatalf("Error getting final rows: %s", err)
 	}
 
-	if foo[0].(graph.Node).Labels[0] != "FOO" && foo[0].(graph.Node).Properties["b"] != int8(1) && foo[0].(graph.Node).Properties["a"] != "two" {
+	if foo[0].(graph.Node).Labels[0] != "FOO" && foo[0].(graph.Node).Properties["b"] != int64(1) && foo[0].(graph.Node).Properties["a"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if bar[0].(graph.Node).Labels[0] != "BAR" && bar[0].(graph.Node).Properties["a"] != int8(2) && bar[0].(graph.Node).Properties["b"] != "two" {
+	if bar[0].(graph.Node).Labels[0] != "BAR" && bar[0].(graph.Node).Properties["a"] != int64(2) && bar[0].(graph.Node).Properties["b"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if baz[0].(graph.Node).Labels[0] != "BAZ" && baz[0].(graph.Node).Properties["a"] != int8(3) && baz[0].(graph.Node).Properties["b"] != "four" {
+	if baz[0].(graph.Node).Labels[0] != "BAZ" && baz[0].(graph.Node).Properties["a"] != int64(3) && baz[0].(graph.Node).Properties["b"] != "four" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
 	if nextRows != nil {
@@ -229,7 +229,7 @@ func TestBoltConn_SqlQueryAndExec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error occurred decoding item: %s", err)
 	}
-	if !reflect.DeepEqual(dVal.([]interface{}), []interface{}{int8(1), int8(2), int8(3)}) {
+	if !reflect.DeepEqual(dVal.([]interface{}), []interface{}{int64(1), int64(2), int64(3)}) {
 		t.Fatalf("Unexpected value for d. Expected: %#v  Got: %#v", []interface{}{1, 2, 3}, dVal)
 	}
 
@@ -248,8 +248,8 @@ func TestBoltConn_SqlQueryAndExec(t *testing.T) {
 	if nodeVal.(graph.Node).Labels[0] != "FOO" {
 		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", nodeVal)
 	}
-	if nodeVal.(graph.Node).Properties["a"] != int8(1) {
-		t.Fatalf("Unexpected value for node. Expected: %#v  Got: %#v", int8(1), nodeVal)
+	if nodeVal.(graph.Node).Properties["a"] != int64(1) {
+		t.Fatalf("Unexpected value for node. Expected: %#v  Got: %#v", int64(1), nodeVal)
 	}
 
 	relVal, err := encoding.Unmarshal(rel)
@@ -447,13 +447,13 @@ func TestBoltConn_PipelineExec(t *testing.T) {
 		t.Fatalf("An error occurred on getting row: %s", err)
 	}
 
-	if output[0].(graph.Node).Labels[0] != "FOO" && output[0].(graph.Node).Properties["b"] != int8(1) && output[0].(graph.Node).Properties["a"] != "two" {
+	if output[0].(graph.Node).Labels[0] != "FOO" && output[0].(graph.Node).Properties["b"] != int64(1) && output[0].(graph.Node).Properties["a"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if output[1].(graph.Node).Labels[0] != "BAR" && output[1].(graph.Node).Properties["a"] != int8(2) && output[1].(graph.Node).Properties["b"] != "two" {
+	if output[1].(graph.Node).Labels[0] != "BAR" && output[1].(graph.Node).Properties["a"] != int64(2) && output[1].(graph.Node).Properties["b"] != "two" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
-	if output[2].(graph.Node).Labels[0] != "BAZ" && output[2].(graph.Node).Properties["a"] != int8(3) && output[2].(graph.Node).Properties["b"] != "four" {
+	if output[2].(graph.Node).Labels[0] != "BAZ" && output[2].(graph.Node).Properties["a"] != int64(3) && output[2].(graph.Node).Properties["b"] != "four" {
 		t.Fatalf("Unexpected return data: %s", err)
 	}
 
