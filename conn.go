@@ -624,10 +624,15 @@ func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interfac
 	if c.closed {
 		return nil, errors.New("Connection already closed")
 	}
-	if len(params) != len(queries) {
-		return nil, errors.New("Must pass same number of params as there are queries")
-	}
 
 	c.statement = newPipelineStmt(queries, c)
-	return c.statement.QueryPipeline(params...)
+	rows, err := c.statement.QueryPipeline(params...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Since we're not exposing the statement,
+	// tell the rows to close it when they are closed
+	rows.(*boltRows).closeStatement = true
+	return rows, nil
 }

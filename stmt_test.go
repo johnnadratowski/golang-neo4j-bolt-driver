@@ -1502,7 +1502,11 @@ func TestBoltStmt_SqlQuery(t *testing.T) {
 		t.Fatalf("An error occurred marshalling args: %s", err)
 	}
 
-	rows, err := db.Query(`CREATE path=(f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}})-[b:BAR]->(c:BAZ) RETURN f.a, f.b, f.c, f.d, f.e, f.f, f, b, path`, arg)
+	stmt, err := db.Prepare(`CREATE path=(f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}})-[b:BAR]->(c:BAZ) RETURN f.a, f.b, f.c, f.d, f.e, f.f, f, b, path`)
+	if err != nil {
+		t.Fatalf("An error occurred preparing statement: %s", err)
+	}
+	rows, err := stmt.Query(arg)
 	if err != nil {
 		t.Fatalf("An error occurred querying statement: %s", err)
 	}

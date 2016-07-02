@@ -58,14 +58,17 @@ func (s *boltStmt) Close() error {
 	if s.closed {
 		return nil
 	}
+	// Eager - prevents issue when forgetting to close
+	// rows if rows has "closeStatement"
+	s.closed = true
 
 	if s.rows != nil {
 		if err := s.rows.Close(); err != nil {
+			s.closed = false // Undo eager close
 			return err
 		}
 	}
 
-	s.closed = true
 	s.conn.statement = nil
 	s.conn = nil
 	return nil
