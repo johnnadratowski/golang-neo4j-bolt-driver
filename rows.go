@@ -140,7 +140,12 @@ func (r *boltRows) Close() error {
 		if r.statement.queries != nil {
 			numQueries := len(r.statement.queries)
 			if numQueries > 0 {
-				numConsume = r.pipelineIndex - numQueries - 1
+				// So, every pipeline statement has two successes
+				// but by the time you get to the row object, one has
+				// been consumed. Hence we need to clear out the
+				// rest of the messages on close by taking the current
+				// index * 2 but removing the first success
+				numConsume = ((numQueries - r.pipelineIndex) * 2) - 1
 			}
 		}
 
@@ -239,9 +244,8 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 	case messages.SuccessMessage:
 		log.Infof("Got success message: %#v", resp)
 
-		r.finishedConsume = true
-
 		if r.pipelineIndex == len(r.statement.queries)-1 {
+			r.finishedConsume = true
 			return nil, nil, nil, err
 		}
 
