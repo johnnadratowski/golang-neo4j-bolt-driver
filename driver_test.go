@@ -9,10 +9,13 @@ import (
 
 var (
 	neo4jConnStr = ""
+	recordOutput = false
 )
 
 func TestMain(m *testing.M) {
 	log.SetLevel(os.Getenv("BOLT_DRIVER_LOG"))
+
+	recordOutput = os.Getenv("RECORD_OUTPUT") != ""
 
 	neo4jConnStr = os.Getenv("NEO4J_BOLT")
 	if neo4jConnStr != "" {
