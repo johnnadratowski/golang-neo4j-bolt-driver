@@ -194,6 +194,9 @@ func (r *recorder) writeRecording() error {
 }
 
 func (r *recorder) flush() error {
+	if os.Getenv("RECORD_OUTPUT") == "" {
+		return nil
+	}
 	return r.writeRecording()
 }
 
