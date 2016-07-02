@@ -64,8 +64,8 @@ type Conn interface {
 type boltConn struct {
 	connStr       string
 	url           *url.URL
-	user     string
-	password     string
+	user          string
+	password      string
 	conn          net.Conn
 	serverVersion []byte
 	timeout       time.Duration
@@ -84,11 +84,10 @@ func newBoltConn(connStr string) (*boltConn, error) {
 		return nil, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
 
-
 	// TODO: TLS Support
 	c := &boltConn{
-		connStr:   connStr,
-		url:       url,
+		connStr: connStr,
+		url:     url,
 		// TODO: Test best default
 		// Default to 10 second timeout
 		timeout: time.Second * time.Duration(10),
