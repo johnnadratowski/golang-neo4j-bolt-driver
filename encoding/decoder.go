@@ -485,16 +485,7 @@ func (d Decoder) decodeFailureMessage(buffer *bytes.Buffer) (messages.FailureMes
 }
 
 func (d Decoder) decodeIgnoredMessage(buffer *bytes.Buffer) (messages.IgnoredMessage, error) {
-	metadataInt, err := d.decode(buffer)
-	if err != nil {
-		return messages.IgnoredMessage{}, err
-	}
-	metadata, ok := metadataInt.(map[string]interface{})
-	if !ok {
-		return messages.IgnoredMessage{}, errors.New("Expected: Metadata map[string]interface{}, but got %T %+v", metadataInt, metadataInt)
-	}
-
-	return messages.NewIgnoredMessage(metadata), nil
+	return messages.NewIgnoredMessage(), nil
 }
 
 func (d Decoder) decodeSuccessMessage(buffer *bytes.Buffer) (messages.SuccessMessage, error) {

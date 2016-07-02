@@ -125,3 +125,55 @@ func TestBoltConn_SelectAll(t *testing.T) {
 		t.Fatalf("Error closing connection: %s", err)
 	}
 }
+
+func TestBoltConn_Ignored(t *testing.T) {
+	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_SelectAll", neo4jConnStr)
+
+	conn, _ := driver.OpenNeo(neo4jConnStr)
+	defer conn.Close()
+
+	// This will make two calls at once - Run and Pull All.  The pull all should be ignored, which is what
+	// we're testing.
+	_, err := conn.ExecNeo("syntax error", map[string]interface{}{"foo": 1, "bar": 2.2})
+	if err == nil {
+		t.Fatal("Expected an error on syntax error.")
+	}
+
+	data, _, _, err := conn.QueryNeoAll("RETURN 1;", nil)
+	if err != nil {
+		t.Fatalf("Got error when running next query after a failure: %#v", err)
+	}
+
+	if data[0][0].(int64) != 1 {
+		t.Fatalf("Expected different data from output: %#v", data)
+	}
+}
+
+func TestBoltConn_IgnoredPipeline(t *testing.T) {
+	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_SelectAll", neo4jConnStr)
+
+	conn, _ := driver.OpenNeo(neo4jConnStr)
+	defer conn.Close()
+
+	// This will make two calls at once - Run and Pull All.  The pull all should be ignored, which is what
+	// we're testing.
+	_, err := conn.ExecPipeline([]string{"syntax error", "syntax error", "syntax error"}, nil)
+	if err == nil {
+		t.Fatal("Expected an error on syntax error.")
+	}
+
+	data, _, _, err := conn.QueryNeoAll("RETURN 1;", nil)
+	if err != nil {
+		t.Fatalf("Got error when running next query after a failure: %#v", err)
+	}
+
+	if data[0][0].(int64) != 1 {
+		t.Fatalf("Expected different data from output: %#v", data)
+	}
+}
