@@ -3,7 +3,6 @@
 Implements the Neo4J Bolt Protocol specification:
 As of the time of writing this, the current version is v3.1.0-M02
 
-
 ```
 go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 ```
@@ -11,6 +10,8 @@ go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 ## Usage
 
 *_Please see [the statement tests](./stmt_test.go) for example usage_*
+
+*_There is more detailed information in [godoc.org](http://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver)_*
 
 This implementation attempts to follow the best practices as per the Bolt specification, but also implements compatibility with Golang's `sql.driver` interface.
 
