@@ -19,6 +19,12 @@ type recorder struct {
 	events []*event
 }
 
+func newRecorder(conn Conn) *recorder {
+	return &recorder{
+		conn,
+	}
+}
+
 func (r *recorder) completedLast() bool {
 	event := r.lastEvent()
 	if event == nil {

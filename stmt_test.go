@@ -16,7 +16,15 @@ import (
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {
-	conn, err := NewDriver().OpenNeo(neo4jConnStr)
+	driver := NewDriver()
+
+	// Records session for testing
+	driver.recorder = newRecorder()
+	defer driver.recorder.flush()
+
+	conn, err := driver.OpenNeo(neo4jConnStr)
+
+
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}

@@ -41,7 +41,7 @@ go build
 BOLT_DRIVER_LOG=info NEO4J_BOLT=bolt://localhost:7687 go test -coverprofile=./tmp/cover.out -coverpkg=./... -v && go tool cover -html=./tmp/cover.out
 ```
 
-The tests are written in an integration testing style.  Most of them are in the statement tests, but should be made more granular in the future.
+The tests are written in an integration testing style.  Most of them are in the statement tests, but should be made more granular in the future.  You need access to a running Neo4J database to run the tests.
 
 ## TODO
 

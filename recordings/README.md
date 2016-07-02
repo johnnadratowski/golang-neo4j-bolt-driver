@@ -1,0 +1,1 @@
+Contains recordings for playback when using tests.  These recordings are taken when the tests run against a neo4j database, and stored here.  If running the tests w/o a database, these get played back.

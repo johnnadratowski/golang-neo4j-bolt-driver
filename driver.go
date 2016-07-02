@@ -40,7 +40,9 @@ type Driver interface {
 	OpenNeo(string) (Conn, error)
 }
 
-type boltDriver struct{}
+type boltDriver struct{
+	recorder *recorder
+}
 
 // NewDriver creates a new Driver object
 func NewDriver() Driver {
@@ -54,6 +56,9 @@ func (b *boltDriver) Open(connStr string) (driver.Conn, error) {
 
 // Open opens a new Bolt connection to the Neo4J database. Implements a Neo-friendly alternative to sql/driver.
 func (b *boltDriver) OpenNeo(connStr string) (Conn, error) {
+	if driver.recorder != nil {
+
+	}
 	return newBoltConn(connStr)
 }
 func init() {

@@ -72,6 +72,12 @@ type boltConn struct {
 	closed        bool
 	transaction   *boltTx
 	statement     *boltStmt
+	recorder      *recorder
+}
+
+// newBoltConnRecorder Creates a new bolt connection using a recorder
+func newBoltConn(connStr string, recorder *recorder) (*boltConn, error) {
+
 }
 
 // newBoltConn Creates a new bolt connection
