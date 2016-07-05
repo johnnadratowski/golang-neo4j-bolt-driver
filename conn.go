@@ -20,7 +20,7 @@ import (
 
 // Conn represents a connection to Neo4J
 //
-// Implements sql/driver, but also includes its own more neo-friendly interface.
+// Implements a neo-friendly interface.
 // Some of the features of this interface implement neo-specific features
 // unavailable in the sql/driver compatible interface
 //
@@ -28,15 +28,11 @@ import (
 // THREAD SAFE.  If you want to use multipe go routines with these objects,
 // you should use a driver to create a new conn for each routine.
 type Conn interface {
-	// Prepare prepares an sql.driver compatible statement
-	Prepare(query string) (driver.Stmt, error)
 	// PrepareNeo prepares a neo4j specific statement
 	PrepareNeo(query string) (Stmt, error)
 	// PreparePipeline prepares a neo4j specific pipeline statement
 	// Useful for running multiple queries at the same time
 	PreparePipeline(query ...string) (PipelineStmt, error)
-	// Query queries using the sql.driver Queryer interface
-	Query(query string, args []driver.Value) (driver.Rows, error)
 	// QueryNeo queries using the neo4j-specific interface
 	QueryNeo(query string, params map[string]interface{}) (Rows, error)
 	// QueryNeoAll queries using the neo4j-specific interface and returns all row data and output metadata
@@ -44,8 +40,6 @@ type Conn interface {
 	// QueryPipeline queries using the neo4j-specific interface
 	// pipelining multiple statements
 	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
-	// Exec executes using the sql.driver Execer interface
-	Exec(query string, args []driver.Value) (driver.Result, error)
 	// ExecNeo executes a query using the neo4j-specific interface
 	ExecNeo(query string, params map[string]interface{}) (Result, error)
 	// ExecPipeline executes a query using the neo4j-specific interface
