@@ -112,6 +112,10 @@ func TestBoltConn_SelectAll(t *testing.T) {
 		t.Fatalf("Unexpected request metadata: %#v", metadata)
 	}
 
+	results, err = conn.ExecNeo("MATCH (n:NODE) DELETE n", nil)
+	if err != nil {
+		t.Fatalf("An error occurred querying Neo: %s", err)
+	}
 	affected, err = results.RowsAffected()
 	if err != nil {
 		t.Fatalf("An error occurred getting rows affected: %s", err)

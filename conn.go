@@ -75,14 +75,13 @@ type boltConn struct {
 	closed        bool
 	transaction   *boltTx
 	statement     *boltStmt
-	recorder      *recorder
+	driver        *boltDriver
+	poolDriver    DriverPool
 }
 
-// newBoltConn Creates a new bolt connection
-func newBoltConn(connStr string, recorder *recorder) (*boltConn, error) {
-
+func createBoltConn(connStr string) *boltConn {
 	// TODO: TLS Support
-	c := &boltConn{
+	return &boltConn{
 		connStr: connStr,
 		// TODO: Test best default
 		// Default to 10 second timeout
@@ -90,29 +89,28 @@ func newBoltConn(connStr string, recorder *recorder) (*boltConn, error) {
 		// TODO: Test best default.
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
-		recorder:      recorder,
 	}
+}
 
-	var err error
-	if connStr == "" && recorder != nil {
-		c.conn = recorder
-	} else if recorder != nil {
-		recorder.Conn, c.url, c.user, c.password, err = c.createConn()
-		if err != nil {
-			return nil, err
-		}
-		c.conn = recorder
-	} else {
-		c.conn, c.url, c.user, c.password, err = c.createConn()
-		if err != nil {
-			return nil, err
-		}
-	}
+// newBoltConn Creates a new bolt connection
+func newBoltConn(connStr string, driver *boltDriver) (*boltConn, error) {
 
-	err = c.initialize()
+	c := createBoltConn(connStr)
+	c.driver = driver
+
+	err := c.initialize()
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred initializing connection")
 	}
+
+	return c, nil
+}
+
+// newPooledBoltConn Creates a new bolt connection with a pooled driver
+func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
+
+	c := createBoltConn(connStr)
+	c.poolDriver = driver
 
 	return c, nil
 }
@@ -179,6 +177,25 @@ func (c *boltConn) handShake() error {
 }
 
 func (c *boltConn) initialize() error {
+
+	// Handle recorder. If there is no conn string, assumer we're playing back a recording.
+	// If there is a recorder and a conn string, assume we're recording the connection
+	// Else, just create the conn normally
+	var err error
+	if c.connStr == "" && c.driver != nil && c.driver.recorder != nil {
+		c.conn = c.driver.recorder
+	} else if c.driver != nil && c.driver.recorder != nil {
+		c.driver.recorder.Conn, c.url, c.user, c.password, err = c.createConn()
+		if err != nil {
+			return err
+		}
+		c.conn = c.driver.recorder
+	} else {
+		c.conn, c.url, c.user, c.password, err = c.createConn()
+		if err != nil {
+			return err
+		}
+	}
 
 	if err := c.handShake(); err != nil {
 		if e := c.Close(); e != nil {
@@ -247,6 +264,7 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
 func (c *boltConn) Close() error {
+
 	if c.closed {
 		return nil
 	}
@@ -269,7 +287,12 @@ func (c *boltConn) Close() error {
 		}
 	}
 
-	// TODO: Connection Pooling?
+	if c.poolDriver != nil {
+		// If using connection pooling, don't close connection, just reclaim it
+		c.poolDriver.reclaim(c)
+		return nil
+	}
+
 	err := c.conn.Close()
 	c.closed = true
 	if err != nil {

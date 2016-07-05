@@ -16,6 +16,15 @@ type test struct {
 
 func main() {
 
+	t := &test{[]byte{1, 2, 3}}
+	t1 := &test{}
+	fmt.Printf("TEE: %#v\n", t)
+	fmt.Printf("TEE1: %#v\n", t1)
+	*t1 = *t
+	t = nil
+	fmt.Printf("TEE: %#v\n", t)
+	fmt.Printf("TEE1: %#v\n", t1)
+
 	args := map[string]interface{}{
 		"a": 1,
 		"b": 34234.34323,

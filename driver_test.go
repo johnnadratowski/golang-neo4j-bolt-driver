@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
+	"time"
+	"sync"
 )
 
 var (
@@ -49,3 +51,146 @@ func clearNeo() {
 		panic("Error running query to clear DB")
 	}
 }
+
+func TestBoltDriverPool_OpenNeo(t *testing.T) {
+	if neo4jConnStr == "" {
+		t.Skip("Cannot run this test when in recording mode")
+	}
+
+	pool, err := NewDriverPool(neo4jConnStr, 25)
+	if err != nil {
+		t.Fatalf("An error occurred opening driver pool: %#v", err)
+	}
+
+	now := time.Now().Unix()
+	for i := 0; i < 25; i++ {
+		go func() {
+			c, err := pool.OpenPool()
+			if err != nil {
+				t.Fatalf("An error occurred opening conn from pool: %#v", err)
+			}
+			defer c.Close()
+			time.Sleep(time.Millisecond * time.Duration(200))
+		}()
+	}
+
+	c, err := pool.OpenPool()
+	if !(time.Now().Unix()-now < 200) {
+		t.Fatalf("An error occurred opening conn from pool at end: %#v", err)
+	}
+	defer c.Close()
+}
+
+func TestBoltDriverPool_Concurrent(t *testing.T) {
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	driver, err := NewDriverPool(neo4jConnStr, 2)
+	if err != nil {
+		t.Fatalf("An error occurred opening driver pool: %#v", err)
+	}
+
+	yourTurn := make(chan bool)
+	go func() {
+		defer wg.Done()
+
+		conn, err := driver.OpenPool()
+		if err != nil {
+			t.Fatalf("An error occurred opening conn: %s", err)
+		}
+		defer conn.Close()
+
+		data, _, _, err := conn.QueryNeoAll(`MATCH (n) RETURN n`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred querying neo: %s", err)
+		}
+
+		yourTurn <- true
+		<-yourTurn
+
+		if len(data) != 0 {
+			t.Fatalf("Expected no data: %#v", data)
+		}
+
+		data, _, _, err = conn.QueryNeoAll(`MATCH (n) RETURN n`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred querying neo: %s", err)
+		}
+
+		if len(data) != 1 {
+			t.Fatalf("Expected no data: %#v", data)
+		}
+
+		yourTurn <- true
+		<-yourTurn
+
+		data, _, _, err = conn.QueryNeoAll(`MATCH path=(:FOO)-[:BAR]->(:BAZ) RETURN path`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred querying neo: %s", err)
+		}
+
+		if len(data) != 1 {
+			t.Fatalf("Expected no data: %#v", data)
+		}
+
+		yourTurn <- true
+		<-yourTurn
+
+		data, _, _, err = conn.QueryNeoAll(`MATCH path=(:FOO)-[:BAR]->(:BAZ) RETURN path`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred querying neo: %s", err)
+		}
+
+		if len(data) != 0 {
+			t.Fatalf("Expected no data: %#v", data)
+		}
+
+		yourTurn <- true
+	}()
+
+
+	go func() {
+		defer wg.Done()
+
+		conn, err := driver.OpenPool()
+		if err != nil {
+			t.Fatalf("An error occurred opening conn: %s", err)
+		}
+		defer conn.Close()
+
+		<-yourTurn
+
+		_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred creating f neo: %s", err)
+		}
+
+		yourTurn <- true
+		<-yourTurn
+
+		_, err = conn.ExecNeo(`MATCH (f:FOO) CREATE UNIQUE (f)-[b:BAR]->(c:BAZ)`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred creating f neo: %s", err)
+		}
+
+		yourTurn <- true
+		<-yourTurn
+
+		_, err = conn.ExecNeo(`MATCH (:FOO)-[b:BAR]->(:BAZ) DELETE b`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred creating f neo: %s", err)
+		}
+
+		yourTurn <- true
+		<-yourTurn
+
+		_, err = conn.ExecNeo(`MATCH (n) DETACH DELETE n`, nil)
+		if err != nil {
+			t.Fatalf("An error occurred creating f neo: %s", err)
+		}
+	}()
+
+
+	wg.Wait()
+}
+
