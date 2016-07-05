@@ -242,4 +242,3 @@ You need access to a running Neo4J database to develop for this project, so that
 * Cypher Parser to implement NumInput and pre-flight checking
 * More Tests
 * Benchmark Tests
-* Examples
