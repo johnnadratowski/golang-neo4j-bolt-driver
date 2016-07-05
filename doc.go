@@ -6,7 +6,7 @@ Neo4J and Bolt provides.
 
 As such, there are multiple interfaces the user can choose from.
 It's highly recommended that the user use the Neo4J-specific
-interfaces as they are more flexible and efficient then the
+interfaces as they are more flexible and efficient than the
 provided sql.driver compatible methods.
 
 The interface tries to be consistent throughout. The sql.driver
@@ -18,12 +18,17 @@ Neo4j and it's expected that these would be used the most.
 
 The "Pipeline" ones are to support Bolt's pipelining features.
 Pipelines allow the user to send Neo4j many queries at once and
-have them executed by the database asynchronously.  This is useful
+have them executed by the database concurrently.  This is useful
 if you have a bunch of queries that aren't necessarily dependant
 on one another, and you want to get better performance.  The
 internal APIs will also pipeline statements where it is able to
 reliably do so, but by manually using the pipelining feature
 you can maximize your throughput.
+
+The API provides connection pooling using the `NewDriverPool` method.
+This allows you to pass it the maximum number of open connections
+to be used in the pool.  Once this limit is hit, any new clients will
+have to wait for a connection to become available again.
 
 The sql driver is registered as "neo4j-bolt". The sql.driver interface is much more limited than what bolt and neo4j supports.  In some cases, concessions were made in order to make that interface work with the neo4j way of doing things.  The main instance of this is the marshalling of objects to/from the sql.driver.Value interface.  In order to support object types that aren't supported by this interface, the internal encoding package is used to marshal these objects to byte strings. This ultimately makes for a less efficient and more 'clunky' implementation.  A glaring instance of this is passing parameters.  Neo4j expects named parameters but the driver interface can only really support positional parameters. To get around this, the user must create a map[string]interface{} of their parameters and marshal it to a driver.Value using the encoding.Marshal function. Similarly, the user must unmarshal data returned from the queries using the encoding.Unmarshal function, then use type assertions to retrieve the proper type.
 

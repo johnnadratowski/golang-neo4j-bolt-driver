@@ -8,6 +8,14 @@ As of the time of writing this, the current version is v3.1.0-M02
 ```
 go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 ```
+
+## Features
+
+* Neo4j Bolt low-level binary protocol support
+* Message Pipelining for high concurrency
+* Connection Pooling
+* Compatible with sql.driver
+
 ## Usage
 
 *_Please see [the statement tests](./stmt_test.go) or [the conn tests](./conn_test.go) for A LOT of examples of usage_*
@@ -71,6 +79,9 @@ It is recommended that you use the Neo4j Bolt-specific interfaces if possible.  
 The URL format is: `bolt://(user):(password)@(host):(port)`
 Schema must be `bolt`. User and password is only necessary if you are authenticating.
 
+Connection pooling is provided out of the box with the `NewDriverPool` method.  You can give it the maximum number of
+connections to have at a time.
+
 You can get logs from the driver by setting the log level using the `log` packages `SetLevel`.
 
 
@@ -101,7 +112,6 @@ You need access to a running Neo4J database to develop for this project, so that
 
 ## TODO
 
-* Connection pooling for driver when not using SQL interface
 * Cypher Parser to implement NumInput and pre-flight checking
 * More Tests
 * Benchmark Tests
