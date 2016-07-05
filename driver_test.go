@@ -4,9 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"sync"
 	"time"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 )
 
 var (
@@ -82,6 +83,9 @@ func TestBoltDriverPool_OpenNeo(t *testing.T) {
 }
 
 func TestBoltDriverPool_Concurrent(t *testing.T) {
+	if neo4jConnStr == "" {
+		t.Skip("Cannot run this test when in recording mode")
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
