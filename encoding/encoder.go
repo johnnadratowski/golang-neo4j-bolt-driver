@@ -208,16 +208,12 @@ func (e Encoder) encode(iVal interface{}) error {
 	case string:
 		err = e.encodeString(val)
 	case []interface{}:
-		// TODO: Support specific slice types?
 		err = e.encodeSlice(val)
 	case map[string]interface{}:
-		// TODO: Support keys other than strings?
-		// TODO: Support specific map types?
 		err = e.encodeMap(val)
 	case structures.Structure:
 		err = e.encodeStructure(val)
 	default:
-		// TODO: How to handle rune or byte?
 		return errors.New("Unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
 	}
 

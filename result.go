@@ -30,8 +30,7 @@ func (r boltResult) Metadata() map[string]interface{} {
 
 // LastInsertId gets the last inserted id. This will always return -1.
 func (r boltResult) LastInsertId() (int64, error) {
-	// TODO: Is this possible? -
-	// 	I think we would need to parse the query to get the number of parameters
+	// TODO: Is this possible?
 	return -1, nil
 }
 

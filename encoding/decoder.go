@@ -38,8 +38,6 @@ func Unmarshal(b []byte) (interface{}, error) {
 
 // Read out the object bytes to decode
 func (d Decoder) read() (*bytes.Buffer, error) {
-	// TODO: Reset on Error? Close on error?
-
 	// TODO: This implementation currently reads all the chunks
 	// right away.  Could make this so that it starts
 	// processing the first chunk, then re-enters this
@@ -111,7 +109,6 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 		return false, nil
 
 	// INT
-	// TODO: Keep data types or cast to int/int64?
 	case markerInt >= -16 && markerInt <= 127:
 		return int64(int8(marker)), nil
 	case marker == Int8Marker:
@@ -233,7 +230,6 @@ func (d Decoder) decode(buffer *bytes.Buffer) (interface{}, error) {
 }
 
 func (d Decoder) decodeSlice(buffer *bytes.Buffer, size int) ([]interface{}, error) {
-	// TODO: support other data types?
 	slice := make([]interface{}, size)
 	for i := 0; i < size; i++ {
 		item, err := d.decode(buffer)
@@ -247,7 +243,6 @@ func (d Decoder) decodeSlice(buffer *bytes.Buffer, size int) ([]interface{}, err
 }
 
 func (d Decoder) decodeMap(buffer *bytes.Buffer, size int) (map[string]interface{}, error) {
-	// TODO: support other data types? or map[interface{}]interface{}?
 	mapp := make(map[string]interface{}, size)
 	for i := 0; i < size; i++ {
 		keyInt, err := d.decode(buffer)
