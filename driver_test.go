@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"time"
 	"sync"
+	"time"
 )
 
 var (
@@ -148,7 +148,6 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 		yourTurn <- true
 	}()
 
-
 	go func() {
 		defer wg.Done()
 
@@ -190,7 +189,5 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 		}
 	}()
 
-
 	wg.Wait()
 }
-
