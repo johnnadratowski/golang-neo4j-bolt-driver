@@ -24,7 +24,7 @@ go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 
 #### Quick n’ Dirty
 
-```
+```go
 func quickNDirty() {
 	driver := bolt.NewDriver()
 	conn, _ := driver.OpenNeo("bolt://localhost:7687")
@@ -68,7 +68,7 @@ func quickNDirty() {
 
 #### Slow n' Clean
 
-```
+```go
 func slowNClean() {
 	driver := bolt.NewDriver()
 	conn, err := driver.OpenNeo("bolt://localhost:7687")
