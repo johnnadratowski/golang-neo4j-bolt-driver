@@ -1,5 +1,5 @@
 # Golang Neo4J Bolt Driver
-[![Build Status](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver.svg?branch=master)](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver) *Tested against Golang 1.4.2 and up*
+[![Build Status](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver.svg?branch=master)](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver) *Tested against Golang 1.4.3 and up*
 
 
 Implements the Neo4J Bolt Protocol specification:
@@ -24,7 +24,7 @@ go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 
 #### Quick n’ Dirty
 
-```
+```go
 func quickNDirty() {
 	driver := bolt.NewDriver()
 	conn, _ := driver.OpenNeo("bolt://localhost:7687")
@@ -68,7 +68,7 @@ func quickNDirty() {
 
 #### Slow n' Clean
 
-```
+```go
 func slowNClean() {
 	driver := bolt.NewDriver()
 	conn, err := driver.OpenNeo("bolt://localhost:7687")
