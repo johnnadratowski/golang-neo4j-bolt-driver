@@ -12,6 +12,10 @@ import (
 	"io"
 	"math"
 
+	"crypto/tls"
+	"crypto/x509"
+	"strconv"
+
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
@@ -67,6 +71,9 @@ type boltConn struct {
 	timeout       time.Duration
 	chunkSize     uint16
 	closed        bool
+	useTLS        bool
+	certFile      string
+	keyFile       string
 	transaction   *boltTx
 	statement     *boltStmt
 	driver        *boltDriver
@@ -79,7 +86,7 @@ func createBoltConn(connStr string) *boltConn {
 		connStr: connStr,
 		// TODO: Test best default
 		// Default to 10 second timeout
-		timeout: time.Second * time.Duration(10),
+		timeout: time.Second * time.Duration(60),
 		// TODO: Test best default.
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
@@ -128,30 +135,90 @@ func (c *boltConn) createConn() (net.Conn, *url.URL, string, string, error) {
 		}
 	}
 
-	conn, err := net.DialTimeout("tcp", url.Host, c.timeout)
-	if err != nil {
-		return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+	timeout := url.Query().Get("timeout")
+	if timeout != "" {
+		timeoutInt, err := strconv.Atoi(timeout)
+		if err != nil {
+			return nil, nil, "", "", errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
+		}
+
+		c.timeout = time.Duration(timeoutInt) * time.Second
+	}
+
+	useTLS := url.Query().Get("tls")
+	c.useTLS = strings.HasPrefix(strings.ToLower(useTLS), "t") || useTLS == "1"
+
+	log.Trace("Bolt Host: ", url.Host)
+	log.Trace("Timeout: ", c.timeout)
+	log.Trace("User: ", user)
+	log.Trace("Password: ", password)
+	log.Trace("TLS: ", c.useTLS)
+
+	var conn net.Conn
+	if c.useTLS {
+		config, err := c.tlsConfig(url)
+		if err != nil {
+			return nil, nil, "", "", errors.Wrap(err, "An error occurred setting up TLS configuration")
+		}
+		conn, err = tls.Dial("tcp", url.Host, config)
+		if err != nil {
+			return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+		}
+	} else {
+		conn, err = net.DialTimeout("tcp", url.Host, c.timeout)
+		if err != nil {
+			return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+		}
 	}
 
 	return conn, url, user, password, nil
 }
 
-func (c *boltConn) handShake() error {
-
-	numWritten, err := c.Write(magicPreamble)
-	if numWritten != 4 {
-		log.Errorf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 4", numWritten)
-		if err != nil {
-			err = errors.Wrap(err, "An error occurred writing magic preamble")
-		}
-		return err
+func (c *boltConn) tlsConfig(url *url.URL) (*tls.Config, error) {
+	config := &tls.Config{
+		MinVersion: tls.VersionTLS10,
+		MaxVersion: tls.VersionTLS12,
 	}
 
-	numWritten, err = c.Write(supportedVersions)
-	if numWritten != 16 {
-		log.Errorf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 16", numWritten)
+	c.certFile = url.Query().Get("tls_cert_file")
+	c.keyFile = url.Query().Get("tls_key_file")
+	if c.certFile != "" {
+		if c.keyFile == "" {
+			return nil, errors.New("If you're providing a cert file, you must also provide a key file")
+		}
+
+		cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
 		if err != nil {
-			err = errors.Wrap(err, "An error occurred writing supported versions")
+			return nil, err
+		}
+		if len(cert.Certificate) != 2 {
+			return nil, errors.New("client.crt should have 2 concatenated certificates: client + CA")
+		}
+
+		ca, err := x509.ParseCertificate(cert.Certificate[1])
+		if err != nil {
+			return nil, err
+		}
+
+		certPool := x509.NewCertPool()
+		certPool.AddCert(ca)
+		config.Certificates = []tls.Certificate{cert}
+		config.RootCAs = certPool
+		config.ClientAuth = tls.RequireAndVerifyClientCert
+	} else {
+		config.InsecureSkipVerify = true
+	}
+
+	return config, nil
+}
+
+func (c *boltConn) handShake() error {
+
+	numWritten, err := c.Write(handShake)
+	if numWritten != 20 {
+		log.Errorf("Couldn't write expected bytes for magic preamble + supported versions. Written: %d. Expected: 4", numWritten)
+		if err != nil {
+			err = errors.Wrap(err, "An error occurred writing magic preamble + supported versions")
 		}
 		return err
 	}

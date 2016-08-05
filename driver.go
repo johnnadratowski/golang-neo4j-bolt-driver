@@ -13,6 +13,7 @@ var (
 		0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00,
 	}
+	handShake          = append(magicPreamble, supportedVersions...)
 	noVersionSupported = []byte{0x00, 0x00, 0x00, 0x00}
 	// Version is the current version of this driver
 	Version = "1.0"
