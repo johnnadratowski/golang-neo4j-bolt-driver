@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"sync"
 	"time"
 
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
