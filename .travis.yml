@@ -12,11 +12,11 @@ go:
 - 1.6.2
 - tip
 
-before_install:
-- go get github.com/mattn/goveralls
-- go get golang.org/x/tools/cmd/cover
-script:
-- $HOME/gopath/bin/goveralls -service=travis-ci
-env:
-  global:
-    secure: NNmqWMijFv3E9APqlAWlmQgI7h4QOzah/1p4Q3Shl2R9LD/uC0lhyajbprbUaR/dUrHGV0yamdRrkCXwB/GV4ZS1YdYQhqgXOy0MYdAFNgRbuCoTkCOwSpx6M9iF1/qtak1nSdu3gOT3dyW07GGcGYnxN+1qH4/qQN6h4RQasPQwFmr3qIKLCaYEhb0DvAfVCxeWySeCQLKd5sIrpOJB3/raaNug2aOBYPMzh1iIwchpViY7hbyRx58cYR8sQiweQLjhEI1OK4K6qiYkMuCpxbLIf78pw0zzzsgOV3zyCm3v1aXUWCwRYrOvIMsU2AYn8ck+d7Pv+2lg8OgZqUNFcScz2+8j5X2i1KqO7/l+FpyvPr3TOf7FyHMktdqVOH4eUvPu1JRPS2wxrN5dT0xQx9k24ssla6uSVmrGrLJc0trbpUnoZeQM7LbX/2rv8FDjt8RBbyq4cHUdwlh9pB1Q1kohD0LbinwzUr2an2Hyo7BuX8AmZp/qaCWq3pKrdtwQbt/euhoR4DpBMuu/DQYY9OqFbIznlljOBTRRRmMkLRoCM2uUip7tDUKD2wFKq1ykE75IvW44kxdtzD0mr76bR50+1RHTarfW4UQ0hHOchIv00HBIviiE/JDOENCe+bDwcI0DOW2Cp/YrS2HkpIztbTgTkAa9ScAy+grwE57v9+M=
+#before_install:
+#- go get github.com/mattn/goveralls
+#- go get golang.org/x/tools/cmd/cover
+#script:
+#- $HOME/gopath/bin/goveralls -service=travis-ci
+#env:
+  #global:
+    #secure: NNmqWMijFv3E9APqlAWlmQgI7h4QOzah/1p4Q3Shl2R9LD/uC0lhyajbprbUaR/dUrHGV0yamdRrkCXwB/GV4ZS1YdYQhqgXOy0MYdAFNgRbuCoTkCOwSpx6M9iF1/qtak1nSdu3gOT3dyW07GGcGYnxN+1qH4/qQN6h4RQasPQwFmr3qIKLCaYEhb0DvAfVCxeWySeCQLKd5sIrpOJB3/raaNug2aOBYPMzh1iIwchpViY7hbyRx58cYR8sQiweQLjhEI1OK4K6qiYkMuCpxbLIf78pw0zzzsgOV3zyCm3v1aXUWCwRYrOvIMsU2AYn8ck+d7Pv+2lg8OgZqUNFcScz2+8j5X2i1KqO7/l+FpyvPr3TOf7FyHMktdqVOH4eUvPu1JRPS2wxrN5dT0xQx9k24ssla6uSVmrGrLJc0trbpUnoZeQM7LbX/2rv8FDjt8RBbyq4cHUdwlh9pB1Q1kohD0LbinwzUr2an2Hyo7BuX8AmZp/qaCWq3pKrdtwQbt/euhoR4DpBMuu/DQYY9OqFbIznlljOBTRRRmMkLRoCM2uUip7tDUKD2wFKq1ykE75IvW44kxdtzD0mr76bR50+1RHTarfW4UQ0hHOchIv00HBIviiE/JDOENCe+bDwcI0DOW2Cp/YrS2HkpIztbTgTkAa9ScAy+grwE57v9+M=
