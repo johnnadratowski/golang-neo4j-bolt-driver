@@ -1110,10 +1110,6 @@ func TestBoltStmt_SelectMapLimits(t *testing.T) {
 	}
 }
 
-func TestBoltStmt_SelectStructLimits(t *testing.T) {
-	t.Skip("Are there any structs that have more than a few fields?")
-}
-
 func TestBoltStmt_ManyChunks(t *testing.T) {
 	driver := NewDriver()
 

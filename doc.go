@@ -47,5 +47,15 @@ the int64 max.
 
 The URL format is: `bolt://(user):(password)@(host):(port)`
 Schema must be `bolt`. User and password is only necessary if you are authenticating.
+TLS is supported by using query parameters on the connection string, like so:
+`bolt://host:port?tls=true&tls_no_verify=false`
+
+The supported query params are:
+
+* tls - Set to 'true' or '1' if you want to use TLS encryption
+* tls_no_verify - Set to 'true' or '1' if you want to accept any server certificate (for testing, not secure)
+* tls_ca_cert_file - path to a custom ca cert for a self-signed TLS cert
+* tls_cert_file - path to a cert file for this client (need to verify this is processed by Neo4j)
+* tls_key_file - path to a key file for this client (need to verify this is processed by Neo4j)
 */
 package golangNeo4jBoltDriver

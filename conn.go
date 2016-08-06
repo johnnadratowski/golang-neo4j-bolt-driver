@@ -3,6 +3,7 @@ package golangNeo4jBoltDriver
 import (
 	"bytes"
 	"database/sql/driver"
+	"io/ioutil"
 	"net"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 
 	"io"
 	"math"
+
+	"crypto/tls"
+	"crypto/x509"
+	"strconv"
 
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
 	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
@@ -67,6 +72,11 @@ type boltConn struct {
 	timeout       time.Duration
 	chunkSize     uint16
 	closed        bool
+	useTLS        bool
+	certFile      string
+	caCertFile    string
+	keyFile       string
+	tlsNoVerify   bool
 	transaction   *boltTx
 	statement     *boltStmt
 	driver        *boltDriver
@@ -79,7 +89,7 @@ func createBoltConn(connStr string) *boltConn {
 		connStr: connStr,
 		// TODO: Test best default
 		// Default to 10 second timeout
-		timeout: time.Second * time.Duration(10),
+		timeout: time.Second * time.Duration(60),
 		// TODO: Test best default.
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
@@ -109,49 +119,132 @@ func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
 	return c, nil
 }
 
-func (c *boltConn) createConn() (net.Conn, *url.URL, string, string, error) {
+func (c *boltConn) parseURL() (*url.URL, error) {
 	user := ""
 	password := ""
 	url, err := url.Parse(c.connStr)
 	if err != nil {
-		return nil, nil, "", "", errors.Wrap(err, "An error occurred parsing bolt URL")
+		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
 	} else if strings.ToLower(url.Scheme) != "bolt" {
-		return nil, nil, "", "", errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
+		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
 
 	if url.User != nil {
-		user = url.User.Username()
+		c.user = url.User.Username()
 		var isSet bool
-		password, isSet = url.User.Password()
+		c.password, isSet = url.User.Password()
 		if !isSet {
-			return nil, nil, "", "", errors.New("Must specify password when passing user")
+			return url, errors.New("Must specify password when passing user")
 		}
 	}
 
-	conn, err := net.DialTimeout("tcp", url.Host, c.timeout)
-	if err != nil {
-		return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+	timeout := url.Query().Get("timeout")
+	if timeout != "" {
+		timeoutInt, err := strconv.Atoi(timeout)
+		if err != nil {
+			return url, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
+		}
+
+		c.timeout = time.Duration(timeoutInt) * time.Second
 	}
 
-	return conn, url, user, password, nil
+	useTLS := url.Query().Get("tls")
+	c.useTLS = strings.HasPrefix(strings.ToLower(useTLS), "t") || useTLS == "1"
+
+	if c.useTLS {
+		c.certFile = url.Query().Get("tls_cert_file")
+		c.keyFile = url.Query().Get("tls_key_file")
+		c.caCertFile = url.Query().Get("tls_ca_cert_file")
+		noVerify := url.Query().Get("tls_no_verify")
+		c.tlsNoVerify = strings.HasPrefix(strings.ToLower(noVerify), "t") || noVerify == "1"
+	}
+
+	log.Trace("Bolt Host: ", url.Host)
+	log.Trace("Timeout: ", c.timeout)
+	log.Trace("User: ", user)
+	log.Trace("Password: ", password)
+	log.Trace("TLS: ", c.useTLS)
+	log.Trace("TLS No Verify: ", c.tlsNoVerify)
+	log.Trace("Cert File: ", c.certFile)
+	log.Trace("Key File: ", c.keyFile)
+	log.Trace("CA Cert File: ", c.caCertFile)
+
+	return url, nil
+}
+
+func (c *boltConn) createConn() (net.Conn, error) {
+
+	var err error
+	c.url, err = c.parseURL()
+	if err != nil {
+		return nil, errors.Wrap(err, "An error occurred parsing the conn URL")
+	}
+
+	var conn net.Conn
+	if c.useTLS {
+		config, err := c.tlsConfig()
+		if err != nil {
+			return nil, errors.Wrap(err, "An error occurred setting up TLS configuration")
+		}
+		conn, err = tls.Dial("tcp", c.url.Host, config)
+		if err != nil {
+			return nil, errors.Wrap(err, "An error occurred dialing to neo4j")
+		}
+	} else {
+		conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
+		if err != nil {
+			return nil, errors.Wrap(err, "An error occurred dialing to neo4j")
+		}
+	}
+
+	return conn, nil
+}
+
+func (c *boltConn) tlsConfig() (*tls.Config, error) {
+	config := &tls.Config{
+		MinVersion: tls.VersionTLS10,
+		MaxVersion: tls.VersionTLS12,
+	}
+
+	if c.caCertFile != "" {
+		// Load CA cert - usually for self-signed certificates
+		caCert, err := ioutil.ReadFile(c.caCertFile)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		config.RootCAs = caCertPool
+	}
+
+	if c.certFile != "" {
+		if c.keyFile == "" {
+			return nil, errors.New("If you're providing a cert file, you must also provide a key file")
+		}
+
+		cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		config.Certificates = []tls.Certificate{cert}
+	}
+
+	if c.tlsNoVerify {
+		config.InsecureSkipVerify = true
+	}
+
+	return config, nil
 }
 
 func (c *boltConn) handShake() error {
 
-	numWritten, err := c.Write(magicPreamble)
-	if numWritten != 4 {
-		log.Errorf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 4", numWritten)
+	numWritten, err := c.Write(handShake)
+	if numWritten != 20 {
+		log.Errorf("Couldn't write expected bytes for magic preamble + supported versions. Written: %d. Expected: 4", numWritten)
 		if err != nil {
-			err = errors.Wrap(err, "An error occurred writing magic preamble")
-		}
-		return err
-	}
-
-	numWritten, err = c.Write(supportedVersions)
-	if numWritten != 16 {
-		log.Errorf("Couldn't write expected bytes for magic preamble. Written: %d. Expected: 16", numWritten)
-		if err != nil {
-			err = errors.Wrap(err, "An error occurred writing supported versions")
+			err = errors.Wrap(err, "An error occurred writing magic preamble + supported versions")
 		}
 		return err
 	}
@@ -172,20 +265,20 @@ func (c *boltConn) handShake() error {
 
 func (c *boltConn) initialize() error {
 
-	// Handle recorder. If there is no conn string, assumer we're playing back a recording.
+	// Handle recorder. If there is no conn string, assume we're playing back a recording.
 	// If there is a recorder and a conn string, assume we're recording the connection
 	// Else, just create the conn normally
 	var err error
 	if c.connStr == "" && c.driver != nil && c.driver.recorder != nil {
 		c.conn = c.driver.recorder
 	} else if c.driver != nil && c.driver.recorder != nil {
-		c.driver.recorder.Conn, c.url, c.user, c.password, err = c.createConn()
+		c.driver.recorder.Conn, err = c.createConn()
 		if err != nil {
 			return err
 		}
 		c.conn = c.driver.recorder
 	} else {
-		c.conn, c.url, c.user, c.password, err = c.createConn()
+		c.conn, err = c.createConn()
 		if err != nil {
 			return err
 		}

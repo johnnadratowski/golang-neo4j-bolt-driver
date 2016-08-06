@@ -57,9 +57,9 @@ func (d Decoder) read() (*bytes.Buffer, error) {
 			return output, nil
 		}
 
-		data := make([]byte, messageLen)
-		if numRead, err := d.r.Read(data); numRead != int(messageLen) {
-			return nil, errors.Wrap(err, "Couldn't read expected bytes for message. Read: %d Expected: %d.", numRead, messageLen)
+		data, err := d.readData(messageLen)
+		if err != nil {
+			return output, errors.Wrap(err, "An error occurred reading message data")
 		}
 
 		numWritten, err := output.Write(data)
@@ -69,6 +69,28 @@ func (d Decoder) read() (*bytes.Buffer, error) {
 			return output, errors.Wrap(err, "Error writing data to output")
 		}
 	}
+}
+
+func (d Decoder) readData(messageLen uint16) ([]byte, error) {
+	output := make([]byte, messageLen)
+	var totalRead uint16
+	for totalRead < messageLen {
+		data := make([]byte, messageLen-totalRead)
+		numRead, err := d.r.Read(data)
+		if err != nil {
+			return nil, errors.Wrap(err, "An error occurred reading from stream")
+		} else if numRead == 0 {
+			return nil, errors.Wrap(err, "Couldn't read expected bytes for message. Read: %d Expected: %d.", totalRead, messageLen)
+		}
+
+		for idx, b := range data {
+			output[uint16(idx)+totalRead] = b
+		}
+
+		totalRead += uint16(numRead)
+	}
+
+	return output, nil
 }
 
 // Decode decodes the stream to an object
