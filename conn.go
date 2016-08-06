@@ -3,6 +3,7 @@ package golangNeo4jBoltDriver
 import (
 	"bytes"
 	"database/sql/driver"
+	"io/ioutil"
 	"net"
 	"time"
 
@@ -73,6 +74,7 @@ type boltConn struct {
 	closed        bool
 	useTLS        bool
 	certFile      string
+	caCertFile    string
 	keyFile       string
 	transaction   *boltTx
 	statement     *boltStmt
@@ -182,29 +184,34 @@ func (c *boltConn) tlsConfig(url *url.URL) (*tls.Config, error) {
 
 	c.certFile = url.Query().Get("tls_cert_file")
 	c.keyFile = url.Query().Get("tls_key_file")
+	c.caCertFile = url.Query().Get("tls_ca_cert_file")
+	log.Trace("Cert File: ", c.certFile)
+	log.Trace("Key File: ", c.keyFile)
+	log.Trace("CA Cert File: ", c.caCertFile)
 	if c.certFile != "" {
+
 		if c.keyFile == "" {
 			return nil, errors.New("If you're providing a cert file, you must also provide a key file")
+		}
+
+		if c.caCertFile != "" {
+			// Load CA cert - usually for self-signed certificates
+			caCert, err := ioutil.ReadFile(c.caCertFile)
+			if err != nil {
+				return nil, err
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+
+			config.RootCAs = caCertPool
 		}
 
 		cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
 		if err != nil {
 			return nil, err
 		}
-		if len(cert.Certificate) != 2 {
-			return nil, errors.New("client.crt should have 2 concatenated certificates: client + CA")
-		}
 
-		ca, err := x509.ParseCertificate(cert.Certificate[1])
-		if err != nil {
-			return nil, err
-		}
-
-		certPool := x509.NewCertPool()
-		certPool.AddCert(ca)
 		config.Certificates = []tls.Certificate{cert}
-		config.RootCAs = certPool
-		config.ClientAuth = tls.RequireAndVerifyClientCert
 	} else {
 		config.InsecureSkipVerify = true
 	}
