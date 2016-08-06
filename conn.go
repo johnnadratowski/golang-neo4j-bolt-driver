@@ -76,6 +76,7 @@ type boltConn struct {
 	certFile      string
 	caCertFile    string
 	keyFile       string
+	tlsNoVerify bool
 	transaction   *boltTx
 	statement     *boltStmt
 	driver        *boltDriver
@@ -185,25 +186,28 @@ func (c *boltConn) tlsConfig(url *url.URL) (*tls.Config, error) {
 	c.certFile = url.Query().Get("tls_cert_file")
 	c.keyFile = url.Query().Get("tls_key_file")
 	c.caCertFile = url.Query().Get("tls_ca_cert_file")
+	noVerify := url.Query().Get("tls_no_verify")
+	c.tlsNoVerify = strings.HasPrefix(strings.ToLower(noVerify), "t") || noVerify == "1"
+
 	log.Trace("Cert File: ", c.certFile)
 	log.Trace("Key File: ", c.keyFile)
 	log.Trace("CA Cert File: ", c.caCertFile)
-	if c.certFile != "" {
 
+	if c.caCertFile != "" {
+		// Load CA cert - usually for self-signed certificates
+		caCert, err := ioutil.ReadFile(c.caCertFile)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		config.RootCAs = caCertPool
+	}
+
+	if c.certFile != "" {
 		if c.keyFile == "" {
 			return nil, errors.New("If you're providing a cert file, you must also provide a key file")
-		}
-
-		if c.caCertFile != "" {
-			// Load CA cert - usually for self-signed certificates
-			caCert, err := ioutil.ReadFile(c.caCertFile)
-			if err != nil {
-				return nil, err
-			}
-			caCertPool := x509.NewCertPool()
-			caCertPool.AppendCertsFromPEM(caCert)
-
-			config.RootCAs = caCertPool
 		}
 
 		cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
@@ -212,7 +216,9 @@ func (c *boltConn) tlsConfig(url *url.URL) (*tls.Config, error) {
 		}
 
 		config.Certificates = []tls.Certificate{cert}
-	} else {
+	}
+
+	if c.tlsNoVerify {
 		config.InsecureSkipVerify = true
 	}
 
