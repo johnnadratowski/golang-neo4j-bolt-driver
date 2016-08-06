@@ -76,7 +76,7 @@ type boltConn struct {
 	certFile      string
 	caCertFile    string
 	keyFile       string
-	tlsNoVerify bool
+	tlsNoVerify   bool
 	transaction   *boltTx
 	statement     *boltStmt
 	driver        *boltDriver
