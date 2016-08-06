@@ -119,22 +119,22 @@ func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
 	return c, nil
 }
 
-func (c *boltConn) createConn() (net.Conn, *url.URL, string, string, error) {
+func (c *boltConn) parseURL() (*url.URL, error) {
 	user := ""
 	password := ""
 	url, err := url.Parse(c.connStr)
 	if err != nil {
-		return nil, nil, "", "", errors.Wrap(err, "An error occurred parsing bolt URL")
+		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
 	} else if strings.ToLower(url.Scheme) != "bolt" {
-		return nil, nil, "", "", errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
+		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
 
 	if url.User != nil {
-		user = url.User.Username()
+		c.user = url.User.Username()
 		var isSet bool
-		password, isSet = url.User.Password()
+		c.password, isSet = url.User.Password()
 		if !isSet {
-			return nil, nil, "", "", errors.New("Must specify password when passing user")
+			return url, errors.New("Must specify password when passing user")
 		}
 	}
 
@@ -142,7 +142,7 @@ func (c *boltConn) createConn() (net.Conn, *url.URL, string, string, error) {
 	if timeout != "" {
 		timeoutInt, err := strconv.Atoi(timeout)
 		if err != nil {
-			return nil, nil, "", "", errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
+			return url, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
 		}
 
 		c.timeout = time.Duration(timeoutInt) * time.Second
@@ -151,47 +151,60 @@ func (c *boltConn) createConn() (net.Conn, *url.URL, string, string, error) {
 	useTLS := url.Query().Get("tls")
 	c.useTLS = strings.HasPrefix(strings.ToLower(useTLS), "t") || useTLS == "1"
 
+	if c.useTLS {
+		c.certFile = url.Query().Get("tls_cert_file")
+		c.keyFile = url.Query().Get("tls_key_file")
+		c.caCertFile = url.Query().Get("tls_ca_cert_file")
+		noVerify := url.Query().Get("tls_no_verify")
+		c.tlsNoVerify = strings.HasPrefix(strings.ToLower(noVerify), "t") || noVerify == "1"
+	}
+
 	log.Trace("Bolt Host: ", url.Host)
 	log.Trace("Timeout: ", c.timeout)
 	log.Trace("User: ", user)
 	log.Trace("Password: ", password)
 	log.Trace("TLS: ", c.useTLS)
+	log.Trace("TLS No Verify: ", c.tlsNoVerify)
+	log.Trace("Cert File: ", c.certFile)
+	log.Trace("Key File: ", c.keyFile)
+	log.Trace("CA Cert File: ", c.caCertFile)
+
+	return url, nil
+}
+
+func (c *boltConn) createConn() (net.Conn, error) {
+
+	var err error
+	c.url, err = c.parseURL()
+	if err != nil {
+		return nil, errors.Wrap(err, "An error occurred parsing the conn URL")
+	}
 
 	var conn net.Conn
 	if c.useTLS {
-		config, err := c.tlsConfig(url)
+		config, err := c.tlsConfig()
 		if err != nil {
-			return nil, nil, "", "", errors.Wrap(err, "An error occurred setting up TLS configuration")
+			return nil, errors.Wrap(err, "An error occurred setting up TLS configuration")
 		}
-		conn, err = tls.Dial("tcp", url.Host, config)
+		conn, err = tls.Dial("tcp", c.url.Host, config)
 		if err != nil {
-			return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+			return nil, errors.Wrap(err, "An error occurred dialing to neo4j")
 		}
 	} else {
-		conn, err = net.DialTimeout("tcp", url.Host, c.timeout)
+		conn, err = net.DialTimeout("tcp", c.url.Host, c.timeout)
 		if err != nil {
-			return nil, nil, "", "", errors.Wrap(err, "An error occurred dialing to neo4j")
+			return nil, errors.Wrap(err, "An error occurred dialing to neo4j")
 		}
 	}
 
-	return conn, url, user, password, nil
+	return conn, nil
 }
 
-func (c *boltConn) tlsConfig(url *url.URL) (*tls.Config, error) {
+func (c *boltConn) tlsConfig() (*tls.Config, error) {
 	config := &tls.Config{
 		MinVersion: tls.VersionTLS10,
 		MaxVersion: tls.VersionTLS12,
 	}
-
-	c.certFile = url.Query().Get("tls_cert_file")
-	c.keyFile = url.Query().Get("tls_key_file")
-	c.caCertFile = url.Query().Get("tls_ca_cert_file")
-	noVerify := url.Query().Get("tls_no_verify")
-	c.tlsNoVerify = strings.HasPrefix(strings.ToLower(noVerify), "t") || noVerify == "1"
-
-	log.Trace("Cert File: ", c.certFile)
-	log.Trace("Key File: ", c.keyFile)
-	log.Trace("CA Cert File: ", c.caCertFile)
 
 	if c.caCertFile != "" {
 		// Load CA cert - usually for self-signed certificates
@@ -252,20 +265,20 @@ func (c *boltConn) handShake() error {
 
 func (c *boltConn) initialize() error {
 
-	// Handle recorder. If there is no conn string, assumer we're playing back a recording.
+	// Handle recorder. If there is no conn string, assume we're playing back a recording.
 	// If there is a recorder and a conn string, assume we're recording the connection
 	// Else, just create the conn normally
 	var err error
 	if c.connStr == "" && c.driver != nil && c.driver.recorder != nil {
 		c.conn = c.driver.recorder
 	} else if c.driver != nil && c.driver.recorder != nil {
-		c.driver.recorder.Conn, c.url, c.user, c.password, err = c.createConn()
+		c.driver.recorder.Conn, err = c.createConn()
 		if err != nil {
 			return err
 		}
 		c.conn = c.driver.recorder
 	} else {
-		c.conn, c.url, c.user, c.password, err = c.createConn()
+		c.conn, err = c.createConn()
 		if err != nil {
 			return err
 		}
