@@ -52,6 +52,7 @@ TLS is supported by using query parameters on the connection string, like so:
 
 The supported query params are:
 
+* timeout - the number of seconds to set the connection timeout to. Defaults to 60 seconds.
 * tls - Set to 'true' or '1' if you want to use TLS encryption
 * tls_no_verify - Set to 'true' or '1' if you want to accept any server certificate (for testing, not secure)
 * tls_ca_cert_file - path to a custom ca cert for a self-signed TLS cert

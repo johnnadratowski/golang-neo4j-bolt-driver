@@ -38,11 +38,6 @@ func Unmarshal(b []byte) (interface{}, error) {
 
 // Read out the object bytes to decode
 func (d Decoder) read() (*bytes.Buffer, error) {
-	// TODO: This implementation currently reads all the chunks
-	// right away.  Could make this so that it starts
-	// processing the first chunk, then re-enters this
-	// function to get the next chunk until the end is reached.
-	// JUST A THOUGHT! :-)
 	output := &bytes.Buffer{}
 	for {
 		lengthBytes := make([]byte, 2)
@@ -288,7 +283,6 @@ func (d Decoder) decodeMap(buffer *bytes.Buffer, size int) (map[string]interface
 
 func (d Decoder) decodeStruct(buffer *bytes.Buffer, size int) (interface{}, error) {
 
-	// TODO: How to handle size? Right now I do nothing
 	signature, err := buffer.ReadByte()
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred reading struct signature byte")

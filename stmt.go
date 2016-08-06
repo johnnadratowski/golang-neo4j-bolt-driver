@@ -74,7 +74,7 @@ func (s *boltStmt) Close() error {
 // NumInput returns the number of placeholder parameters. See sql/driver.Stmt.
 // Currently will always return -1
 func (s *boltStmt) NumInput() int {
-	return -1 // TODO: Not sure if we should disable this
+	return -1 // TODO: would need a cypher parser for this. disable for now
 }
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.

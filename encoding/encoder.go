@@ -165,11 +165,6 @@ func (e Encoder) Encode(iVal interface{}) error {
 // Encode encodes an object to the stream
 func (e Encoder) encode(iVal interface{}) error {
 
-	// TODO: How to handle pointers?
-	//if reflect.TypeOf(iVal) == reflect.Ptr {
-	//	return Encode(*iVal)
-	//}
-
 	var err error
 	switch val := iVal.(type) {
 	case nil:
@@ -195,8 +190,6 @@ func (e Encoder) encode(iVal interface{}) error {
 	case uint32:
 		err = e.encodeInt(int64(val))
 	case uint64:
-		// TODO: Bolt docs only mention going up to int64, not uint64
-		// So I'll make this fail for now
 		if val > math.MaxInt64 {
 			return errors.New("Integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
 		}
@@ -287,9 +280,6 @@ func (e Encoder) encodeInt(val int64) error {
 		}
 		err = binary.Write(e, binary.BigEndian, val)
 	default:
-		// TODO: Should handle uint64? Can bolt handle that?
-		// The highest number from the docs is int64 max
-		// I want to catch the case if I missed it
 		return errors.New("Int too long to write: %d", val)
 	}
 	if err != nil {
@@ -349,8 +339,6 @@ func (e Encoder) encodeString(val string) error {
 		}
 		_, err = e.Write(bytes)
 	default:
-		// TODO: Can this happen? Does go have a limit on the length?
-		// Quick google turned up nothing
 		return errors.New("String too long to write: %s", val)
 	}
 	return err
@@ -386,7 +374,6 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 			return err
 		}
 	default:
-		// TODO: Can this happen? Does go have a limit on the length?
 		return errors.New("Slice too long to write: %+v", val)
 	}
 
@@ -430,7 +417,6 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 			return err
 		}
 	default:
-		// TODO: Can this happen? Does go have a limit on the length?
 		return errors.New("Map too long to write: %+v", val)
 	}
 
@@ -472,7 +458,6 @@ func (e Encoder) encodeStructure(val structures.Structure) error {
 			return err
 		}
 	default:
-		// TODO: Can this happen? Does go have a limit on the length?
 		return errors.New("Structure too long to write: %+v", val)
 	}
 

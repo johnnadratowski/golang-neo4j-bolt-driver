@@ -84,13 +84,9 @@ type boltConn struct {
 }
 
 func createBoltConn(connStr string) *boltConn {
-	// TODO: TLS Support
 	return &boltConn{
-		connStr: connStr,
-		// TODO: Test best default
-		// Default to 10 second timeout
-		timeout: time.Second * time.Duration(60),
-		// TODO: Test best default.
+		connStr:       connStr,
+		timeout:       time.Second * time.Duration(60),
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
 	}
@@ -391,8 +387,6 @@ func (c *boltConn) Close() error {
 
 func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
 	log.Infof("Acknowledging Failure: %#v", failure)
-
-	// TODO: Try RESET on failures?
 
 	ack := messages.NewAckFailureMessage()
 	err := encoding.NewEncoder(c, c.chunkSize).Encode(ack)
