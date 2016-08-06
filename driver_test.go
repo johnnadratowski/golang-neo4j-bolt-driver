@@ -94,7 +94,6 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 		t.Fatalf("An error occurred opening driver pool: %#v", err)
 	}
 
-
 	one := make(chan bool)
 	two := make(chan bool)
 	three := make(chan bool)
