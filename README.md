@@ -14,6 +14,7 @@ go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 * Neo4j Bolt low-level binary protocol support
 * Message Pipelining for high concurrency
 * Connection Pooling
+* TLS support
 * Compatible with sql.driver
 
 ## Usage
@@ -238,7 +239,6 @@ You need access to a running Neo4J database to develop for this project, so that
 
 ## TODO
 
-* TLS Support
 * Cypher Parser to implement NumInput and pre-flight checking
 * More Tests
 * Benchmark Tests
