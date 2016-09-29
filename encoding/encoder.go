@@ -213,13 +213,11 @@ func (e Encoder) encode(iVal interface{}) error {
 	return err
 }
 
-// encodeNil encodes a nil object to the stream
 func (e Encoder) encodeNil() error {
 	_, err := e.Write([]byte{NilMarker})
 	return err
 }
 
-// encodeBool encodes a nil object to the stream
 func (e Encoder) encodeBool(val bool) error {
 	var err error
 	if val {
@@ -230,7 +228,6 @@ func (e Encoder) encodeBool(val bool) error {
 	return err
 }
 
-// encodeInt encodes a nil object to the stream
 func (e Encoder) encodeInt(val int64) error {
 	var err error
 	switch {
@@ -288,7 +285,6 @@ func (e Encoder) encodeInt(val int64) error {
 	return err
 }
 
-// encodeFloat encodes a nil object to the stream
 func (e Encoder) encodeFloat(val float64) error {
 	if _, err := e.Write([]byte{FloatMarker}); err != nil {
 		return err
@@ -302,7 +298,6 @@ func (e Encoder) encodeFloat(val float64) error {
 	return err
 }
 
-// encodeString encodes a nil object to the stream
 func (e Encoder) encodeString(val string) error {
 	var err error
 	bytes := []byte(val)
@@ -344,7 +339,6 @@ func (e Encoder) encodeString(val string) error {
 	return err
 }
 
-// encodeSlice encodes a nil object to the stream
 func (e Encoder) encodeSlice(val []interface{}) error {
 	length := len(val)
 	switch {
@@ -387,7 +381,6 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 	return nil
 }
 
-// encodeMap encodes a nil object to the stream
 func (e Encoder) encodeMap(val map[string]interface{}) error {
 	length := len(val)
 	switch {
@@ -433,7 +426,6 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 	return nil
 }
 
-// encodeMessageStructure encodes a nil object to the stream
 func (e Encoder) encodeStructure(val structures.Structure) error {
 
 	fields := val.AllFields()
