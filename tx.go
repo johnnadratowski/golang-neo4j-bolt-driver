@@ -1,9 +1,9 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Tx represents a transaction

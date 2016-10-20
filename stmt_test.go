@@ -1,18 +1,16 @@
 package golangNeo4jBoltDriver
 
 import (
+	"database/sql"
 	"io"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
-	"strconv"
-
-	"database/sql"
-
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/graph"
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {
@@ -1186,15 +1184,15 @@ func TestBoltStmt_PipelineExec(t *testing.T) {
 	}
 
 	params := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"a": 1,
 			"b": "two",
 		},
-		map[string]interface{}{
+		{
 			"a": 2,
 			"b": "three",
 		},
-		map[string]interface{}{
+		{
 			"a": 3,
 			"b": "four",
 		},
@@ -1313,15 +1311,15 @@ func TestBoltStmt_PipelineQuery(t *testing.T) {
 	}
 
 	params := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"a": 1,
 			"b": "two",
 		},
-		map[string]interface{}{
+		{
 			"a": 2,
 			"b": "three",
 		},
-		map[string]interface{}{
+		{
 			"a": 3,
 			"b": "four",
 		},
@@ -1433,15 +1431,15 @@ func TestBoltStmt_PipelineQueryCloseBeginning(t *testing.T) {
 	}
 
 	params := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"a": 1,
 			"b": "two",
 		},
-		map[string]interface{}{
+		{
 			"a": 2,
 			"b": "three",
 		},
-		map[string]interface{}{
+		{
 			"a": 3,
 			"b": "four",
 		},
@@ -1510,15 +1508,15 @@ func TestBoltStmt_PipelineQueryCloseMiddle(t *testing.T) {
 	}
 
 	params := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"a": 1,
 			"b": "two",
 		},
-		map[string]interface{}{
+		{
 			"a": 2,
 			"b": "three",
 		},
-		map[string]interface{}{
+		{
 			"a": 3,
 			"b": "four",
 		},

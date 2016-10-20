@@ -1,14 +1,14 @@
 package encoding
 
 import (
+	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 
-	"bytes"
-
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures"
 )
 
 const (
@@ -67,10 +67,8 @@ const (
 	Struct16Marker = 0xDD
 )
 
-var (
-	// EndMessage is the data to send to end a message
-	EndMessage = []byte{byte(0x00), byte(0x00)}
-)
+// EndMessage is the data to send to end a message
+var EndMessage = []byte{byte(0x00), byte(0x00)}
 
 // Encoder encodes objects of different types to the given stream.
 // Attempts to support all builtin golang types, when it can be confidently
@@ -81,225 +79,211 @@ var (
 // map[string]interface{} and []interface{} are supported.
 // The interface for maps and slices may be more permissive in the future.
 type Encoder struct {
-	w         io.Writer
-	buf       *bytes.Buffer
-	chunkSize uint16
+	w    io.Writer
+	buf  []byte
+	n    int
+	size int
 }
 
-// NewEncoder Creates a new Encoder object
-func NewEncoder(w io.Writer, chunkSize uint16) Encoder {
-	return Encoder{
-		w:         w,
-		buf:       &bytes.Buffer{},
-		chunkSize: chunkSize,
-	}
+// NewEncoder initializes a new Encoder with the provided chunk size.
+func NewEncoder(w io.Writer, size uint16) *Encoder {
+	return &Encoder{w: w, buf: make([]byte, size), size: int(size)}
 }
 
-// Marshal is used to marshal an object to the bolt interface encoded bytes
+// Marshal is used to marshal an object to the bolt interface encoded bytes.
 func Marshal(v interface{}) ([]byte, error) {
-	x := &bytes.Buffer{}
-	err := NewEncoder(x, math.MaxUint16).Encode(v)
-	return x.Bytes(), err
+	var b bytes.Buffer
+	err := NewEncoder(&b, math.MaxUint16).Encode(v)
+	return b.Bytes(), err
 }
 
-// write writes to the writer.  Buffers the writes using chunkSize.
-func (e Encoder) Write(p []byte) (n int, err error) {
-
-	n, err = e.buf.Write(p)
-	if err != nil {
-		err = errors.Wrap(err, "An error occurred writing to encoder temp buffer")
-		return n, err
-	}
-
-	length := e.buf.Len()
-	for length >= int(e.chunkSize) {
-		if err := binary.Write(e.w, binary.BigEndian, e.chunkSize); err != nil {
-			return 0, errors.Wrap(err, "An error occured writing chunksize")
+// Write writes to the writer. Writes are not necessarily written to the
+// underlying Writer until Flush is called.
+func (e *Encoder) Write(p []byte) (n int, err error) {
+	var m int
+	for n < len(p) {
+		m = copy(e.buf[e.n:], p[n:])
+		e.n += m
+		n += m
+		if e.n == e.size {
+			err = e.writeChunk()
+			if err != nil {
+				return n, err
+			}
 		}
-
-		numWritten, err := e.w.Write(e.buf.Next(int(e.chunkSize)))
-		if err != nil {
-			err = errors.Wrap(err, "An error occured writing a chunk")
-		}
-
-		return numWritten, err
 	}
-
 	return n, nil
 }
 
-// flush finishes the encoding stream by flushing it to the writer
-func (e Encoder) flush() error {
-	length := e.buf.Len()
-	if length > 0 {
-		if err := binary.Write(e.w, binary.BigEndian, uint16(length)); err != nil {
-			return errors.Wrap(err, "An error occured writing length bytes during flush")
-		}
-
-		if _, err := e.buf.WriteTo(e.w); err != nil {
-			return errors.Wrap(err, "An error occured writing message bytes during flush")
-		}
+func (e *Encoder) writeMarker(marker uint8) error {
+	e.buf[e.n] = marker
+	e.n++
+	if e.n == e.size {
+		return e.writeChunk()
 	}
-
-	_, err := e.w.Write(EndMessage)
-	if err != nil {
-		return errors.Wrap(err, "An error occurred ending encoding message")
-	}
-	e.buf.Reset()
-
 	return nil
 }
 
-// Encode encodes an object to the stream
-func (e Encoder) Encode(iVal interface{}) error {
+func (e *Encoder) write(v interface{}) error {
+	return binary.Write(e, binary.BigEndian, v)
+}
 
-	err := e.encode(iVal)
+func (e *Encoder) Flush() error {
+	err := e.writeChunk()
 	if err != nil {
 		return err
 	}
+	_, err = e.w.Write(EndMessage)
+	return err
+}
 
-	// Whatever is left in the buffer for the chunk at the end, write it out
-	return e.flush()
+func (e *Encoder) writeChunk() error {
+	if e.n == 0 {
+		return nil
+	}
+	err := binary.Write(e.w, binary.BigEndian, uint16(e.n))
+	if err != nil {
+		return err
+	}
+	fmt.Println(e.buf[:e.n], e.n, e.size)
+	fmt.Printf("(%d %d) %q\n", e.n, e.size, e.buf[:e.n])
+	_, err = e.w.Write(e.buf[:e.n])
+	e.n = 0
+	return err
 }
 
 // Encode encodes an object to the stream
-func (e Encoder) encode(iVal interface{}) error {
+func (e *Encoder) Encode(val interface{}) error {
+	err := e.encode(val)
+	if err != nil {
+		return err
+	}
+	// Whatever is left in the buffer for the chunk at the end, write it out
+	return e.Flush()
+}
 
-	var err error
-	switch val := iVal.(type) {
+// Encode encodes an object to the stream
+func (e *Encoder) encode(val interface{}) error {
+	switch val := val.(type) {
 	case nil:
-		err = e.encodeNil()
+		return e.encodeNil()
 	case bool:
-		err = e.encodeBool(val)
+		return e.encodeBool(val)
 	case int:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case int8:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case int16:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case int32:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case int64:
-		err = e.encodeInt(val)
+		return e.encodeInt(val)
 	case uint:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case uint8:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case uint16:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case uint32:
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case uint64:
 		if val > math.MaxInt64 {
 			return errors.New("Integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
 		}
-		err = e.encodeInt(int64(val))
+		return e.encodeInt(int64(val))
 	case float32:
-		err = e.encodeFloat(float64(val))
+		return e.encodeFloat(float64(val))
 	case float64:
-		err = e.encodeFloat(val)
+		return e.encodeFloat(val)
 	case string:
-		err = e.encodeString(val)
+		return e.encodeString(val)
 	case []interface{}:
-		err = e.encodeSlice(val)
+		return e.encodeSlice(val)
 	case map[string]interface{}:
-		err = e.encodeMap(val)
+		return e.encodeMap(val)
 	case structures.Structure:
-		err = e.encodeStructure(val)
+		return e.encodeStructure(val)
 	default:
 		return errors.New("Unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
 	}
-
-	return err
 }
 
-func (e Encoder) encodeNil() error {
-	_, err := e.Write([]byte{NilMarker})
-	return err
+func (e *Encoder) encodeNil() error {
+	return e.writeMarker(NilMarker)
 }
 
-func (e Encoder) encodeBool(val bool) error {
-	var err error
+func (e *Encoder) encodeBool(val bool) (err error) {
 	if val {
-		_, err = e.Write([]byte{TrueMarker})
-	} else {
-		_, err = e.Write([]byte{FalseMarker})
+		return e.writeMarker(TrueMarker)
 	}
-	return err
+	return e.writeMarker(FalseMarker)
 }
 
-func (e Encoder) encodeInt(val int64) error {
-	var err error
+func (e *Encoder) encodeInt(val int64) (err error) {
 	switch {
 	case val >= math.MinInt64 && val < math.MinInt32:
 		// Write as INT_64
-		if _, err = e.Write([]byte{Int64Marker}); err != nil {
+		if err = e.writeMarker(Int64Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		return e.write(val)
 	case val >= math.MinInt32 && val < math.MinInt16:
 		// Write as INT_32
-		if _, err = e.Write([]byte{Int32Marker}); err != nil {
+		if err = e.writeMarker(Int32Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, int32(val))
+		return e.write(int32(val))
 	case val >= math.MinInt16 && val < math.MinInt8:
 		// Write as INT_16
-		if _, err = e.Write([]byte{Int16Marker}); err != nil {
+		if err = e.writeMarker(Int16Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, int16(val))
+		return e.write(int16(val))
 	case val >= math.MinInt8 && val < -16:
 		// Write as INT_8
-		if _, err = e.Write([]byte{Int8Marker}); err != nil {
+		if err = e.writeMarker(Int8Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, int8(val))
+		return e.write(int8(val))
 	case val >= -16 && val <= math.MaxInt8:
 		// Write as TINY_INT
-		err = binary.Write(e, binary.BigEndian, int8(val))
+		return e.write(int8(val))
 	case val > math.MaxInt8 && val <= math.MaxInt16:
 		// Write as INT_16
-		if _, err = e.Write([]byte{Int16Marker}); err != nil {
+		if err = e.writeMarker(Int16Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, int16(val))
+		return e.write(int16(val))
 	case val > math.MaxInt16 && val <= math.MaxInt32:
 		// Write as INT_32
-		if _, err = e.Write([]byte{Int32Marker}); err != nil {
+		if err = e.writeMarker(Int32Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, int32(val))
+		return e.write(int32(val))
 	case val > math.MaxInt32 && val <= math.MaxInt64:
 		// Write as INT_64
-		if _, err = e.Write([]byte{Int64Marker}); err != nil {
+		if err = e.writeMarker(Int64Marker); err != nil {
 			return err
 		}
-		err = binary.Write(e, binary.BigEndian, val)
+		return e.write(val)
 	default:
 		return errors.New("Int too long to write: %d", val)
 	}
-	if err != nil {
-		return errors.Wrap(err, "An error occured writing an int to bolt")
-	}
-	return err
 }
 
-func (e Encoder) encodeFloat(val float64) error {
-	if _, err := e.Write([]byte{FloatMarker}); err != nil {
+func (e *Encoder) encodeFloat(val float64) error {
+	if err := e.writeMarker(FloatMarker); err != nil {
 		return err
 	}
-
-	err := binary.Write(e, binary.BigEndian, val)
+	err := e.write(val)
 	if err != nil {
 		return errors.Wrap(err, "An error occured writing a float to bolt")
 	}
-
 	return err
 }
 
-func (e Encoder) encodeString(val string) error {
-	var err error
+func (e *Encoder) encodeString(val string) (err error) {
 	bytes := []byte(val)
 
 	length := len(bytes)
@@ -310,26 +294,26 @@ func (e Encoder) encodeString(val string) error {
 		}
 		_, err = e.Write(bytes)
 	case length > 15 && length <= math.MaxUint8:
-		if _, err = e.Write([]byte{String8Marker}); err != nil {
+		if err = e.writeMarker(String8Marker); err != nil {
 			return err
 		}
-		if err = binary.Write(e, binary.BigEndian, int8(length)); err != nil {
+		if err = e.write(int8(length)); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length > math.MaxUint8 && length <= math.MaxUint16:
-		if _, err = e.Write([]byte{String16Marker}); err != nil {
+		if err = e.writeMarker(String16Marker); err != nil {
 			return err
 		}
-		if err = binary.Write(e, binary.BigEndian, int16(length)); err != nil {
+		if err = e.write(int16(length)); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
 	case length > math.MaxUint16 && length <= math.MaxUint32:
-		if _, err = e.Write([]byte{String32Marker}); err != nil {
+		if err = e.writeMarker(String32Marker); err != nil {
 			return err
 		}
-		if err = binary.Write(e, binary.BigEndian, int32(length)); err != nil {
+		if err = e.write(int32(length)); err != nil {
 			return err
 		}
 		_, err = e.Write(bytes)
@@ -339,7 +323,7 @@ func (e Encoder) encodeString(val string) error {
 	return err
 }
 
-func (e Encoder) encodeSlice(val []interface{}) error {
+func (e *Encoder) encodeSlice(val []interface{}) error {
 	length := len(val)
 	switch {
 	case length <= 15:
@@ -347,24 +331,24 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 			return err
 		}
 	case length > 15 && length <= math.MaxUint8:
-		if _, err := e.Write([]byte{Slice8Marker}); err != nil {
+		if err := e.writeMarker(Slice8Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int8(length)); err != nil {
+		if err := e.write(int8(length)); err != nil {
 			return err
 		}
 	case length > math.MaxUint8 && length <= math.MaxUint16:
-		if _, err := e.Write([]byte{Slice16Marker}); err != nil {
+		if err := e.writeMarker(Slice16Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int16(length)); err != nil {
+		if err := e.write(int16(length)); err != nil {
 			return err
 		}
 	case length >= math.MaxUint16 && length <= math.MaxUint32:
-		if _, err := e.Write([]byte{Slice32Marker}); err != nil {
+		if err := e.writeMarker(Slice32Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int32(length)); err != nil {
+		if err := e.write(int32(length)); err != nil {
 			return err
 		}
 	default:
@@ -377,11 +361,10 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (e Encoder) encodeMap(val map[string]interface{}) error {
+func (e *Encoder) encodeMap(val map[string]interface{}) error {
 	length := len(val)
 	switch {
 	case length <= 15:
@@ -389,24 +372,24 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 			return err
 		}
 	case length > 15 && length <= math.MaxUint8:
-		if _, err := e.Write([]byte{Map8Marker}); err != nil {
+		if err := e.writeMarker(Map8Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int8(length)); err != nil {
+		if err := e.write(int8(length)); err != nil {
 			return err
 		}
 	case length > math.MaxUint8 && length <= math.MaxUint16:
-		if _, err := e.Write([]byte{Map16Marker}); err != nil {
+		if err := e.writeMarker(Map16Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int16(length)); err != nil {
+		if err := e.write(int16(length)); err != nil {
 			return err
 		}
 	case length >= math.MaxUint16 && length <= math.MaxUint32:
-		if _, err := e.Write([]byte{Map32Marker}); err != nil {
+		if err := e.writeMarker(Map32Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int32(length)); err != nil {
+		if err := e.write(int32(length)); err != nil {
 			return err
 		}
 	default:
@@ -422,12 +405,10 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (e Encoder) encodeStructure(val structures.Structure) error {
-
+func (e *Encoder) encodeStructure(val structures.Structure) error {
 	fields := val.AllFields()
 	length := len(fields)
 	switch {
@@ -436,17 +417,17 @@ func (e Encoder) encodeStructure(val structures.Structure) error {
 			return err
 		}
 	case length > 15 && length <= math.MaxUint8:
-		if _, err := e.Write([]byte{Struct8Marker}); err != nil {
+		if err := e.writeMarker(Struct8Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int8(length)); err != nil {
+		if err := e.write(int8(length)); err != nil {
 			return err
 		}
 	case length > math.MaxUint8 && length <= math.MaxUint16:
-		if _, err := e.Write([]byte{Struct16Marker}); err != nil {
+		if err := e.writeMarker(Struct16Marker); err != nil {
 			return err
 		}
-		if err := binary.Write(e, binary.BigEndian, int16(length)); err != nil {
+		if err := e.write(int16(length)); err != nil {
 			return err
 		}
 	default:
@@ -463,6 +444,5 @@ func (e Encoder) encodeStructure(val structures.Structure) error {
 			return errors.Wrap(err, "An error occurred encoding a struct field")
 		}
 	}
-
 	return nil
 }

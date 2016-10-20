@@ -12,9 +12,7 @@ type SuccessMessage struct {
 
 // NewSuccessMessage Gets a new SuccessMessage struct
 func NewSuccessMessage(metadata map[string]interface{}) SuccessMessage {
-	return SuccessMessage{
-		Metadata: metadata,
-	}
+	return SuccessMessage{Metadata: metadata}
 }
 
 // Signature gets the signature byte for the struct

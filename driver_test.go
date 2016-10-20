@@ -6,7 +6,7 @@ import (
 
 	"time"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 	"sync"
 )
 

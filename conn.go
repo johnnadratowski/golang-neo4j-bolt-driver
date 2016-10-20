@@ -2,28 +2,25 @@ package golangNeo4jBoltDriver
 
 import (
 	"bytes"
-	"database/sql/driver"
-	"io/ioutil"
-	"net"
-	"time"
-
-	"net/url"
-	"strings"
-
-	"io"
-	"math"
-
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql/driver"
+	"io"
+	"io/ioutil"
+	"math"
+	"net"
+	"net/url"
 	"strconv"
+	"strings"
+	"time"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
-// Conn represents a connection to Neo4J
+// Conn represents a connection to Neo4J.
 //
 // Implements a neo-friendly interface.
 // Some of the features of this interface implement neo-specific features
@@ -94,7 +91,6 @@ func createBoltConn(connStr string) *boltConn {
 
 // newBoltConn Creates a new bolt connection
 func newBoltConn(connStr string, driver *boltDriver) (*boltConn, error) {
-
 	c := createBoltConn(connStr)
 	c.driver = driver
 
@@ -102,16 +98,13 @@ func newBoltConn(connStr string, driver *boltDriver) (*boltConn, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred initializing connection")
 	}
-
 	return c, nil
 }
 
 // newPooledBoltConn Creates a new bolt connection with a pooled driver
 func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
-
 	c := createBoltConn(connStr)
 	c.poolDriver = driver
-
 	return c, nil
 }
 
@@ -121,7 +114,8 @@ func (c *boltConn) parseURL() (*url.URL, error) {
 	url, err := url.Parse(c.connStr)
 	if err != nil {
 		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
-	} else if strings.ToLower(url.Scheme) != "bolt" {
+	}
+	if strings.ToLower(url.Scheme) != "bolt" {
 		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
 	}
 
@@ -169,7 +163,6 @@ func (c *boltConn) parseURL() (*url.URL, error) {
 }
 
 func (c *boltConn) createConn() (net.Conn, error) {
-
 	var err error
 	c.url, err = c.parseURL()
 	if err != nil {
@@ -235,7 +228,6 @@ func (c *boltConn) tlsConfig() (*tls.Config, error) {
 }
 
 func (c *boltConn) handShake() error {
-
 	numWritten, err := c.Write(handShake)
 	if numWritten != 20 {
 		log.Errorf("Couldn't write expected bytes for magic preamble + supported versions. Written: %d. Expected: 4", numWritten)
@@ -260,7 +252,6 @@ func (c *boltConn) handShake() error {
 }
 
 func (c *boltConn) initialize() error {
-
 	// Handle recorder. If there is no conn string, assume we're playing back a recording.
 	// If there is a recorder and a conn string, assume we're recording the connection
 	// Else, just create the conn normally
@@ -381,7 +372,6 @@ func (c *boltConn) Close() error {
 	if err != nil {
 		return errors.Wrap(err, "An error occurred closing the connection")
 	}
-
 	return nil
 }
 
@@ -625,7 +615,6 @@ func (c *boltConn) sendRunConsume(query string, args map[string]interface{}) (in
 	if err := c.sendRun(query, args); err != nil {
 		return nil, err
 	}
-
 	return c.consume()
 }
 

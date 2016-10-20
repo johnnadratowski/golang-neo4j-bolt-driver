@@ -2,10 +2,10 @@ package golangNeo4jBoltDriver
 
 import (
 	"database/sql/driver"
-	"errors"
 	"fmt"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
 )
 
 // sprintByteHex returns a formatted string of the byte array in hexadecimal
@@ -22,31 +22,29 @@ func sprintByteHex(b []byte) string {
 			output += " "
 		}
 	}
-	output += "\n"
-
-	return output
+	return output + "\n"
 }
 
 // driverArgsToMap turns driver.Value list into a parameter map
 // for neo4j parameters
 func driverArgsToMap(args []driver.Value) (map[string]interface{}, error) {
-	output := map[string]interface{}{}
+	out := make(map[string]interface{}, len(args))
 	for _, arg := range args {
-		argBytes, ok := arg.([]byte)
+		b, ok := arg.([]byte)
 		if !ok {
 			return nil, errors.New("You must pass only a gob encoded map to the Exec/Query args")
 		}
-
-		m, err := encoding.Unmarshal(argBytes)
+		ifc, err := encoding.Unmarshal(b)
 		if err != nil {
 			return nil, err
 		}
-
-		for k, v := range m.(map[string]interface{}) {
-			output[k] = v
+		m, ok := ifc.(map[string]interface{})
+		if !ok {
+			return nil, errors.New("wanted map[string]interface{}, got %T", ifc)
 		}
-
+		for k, v := range m {
+			out[k] = v
+		}
 	}
-
-	return output, nil
+	return out, nil
 }

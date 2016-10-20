@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 )
 
 // recorder records a given session with Neo4j.
@@ -24,27 +25,19 @@ type recorder struct {
 }
 
 func newRecorder(name string, connStr string) *recorder {
-	r := &recorder{
-		name:    name,
-		connStr: connStr,
-	}
+	r := &recorder{name: name, connStr: connStr}
 
 	if r.connStr == "" {
 		if err := r.load(r.name); err != nil {
 			log.Fatalf("Couldn't load data from recording files!: %s", err)
 		}
 	}
-
 	return r
 }
 
 func (r *recorder) completedLast() bool {
 	event := r.lastEvent()
-	if event == nil {
-		return true
-	}
-
-	return event.Completed
+	return event == nil || event.Completed
 }
 
 func (r *recorder) lastEvent() *Event {
@@ -54,19 +47,13 @@ func (r *recorder) lastEvent() *Event {
 	return nil
 }
 
-// Read from the net conn, recording the interaction
-func (r *recorder) Read(b []byte) (n int, err error) {
+// Read reads from the net.Conn, recording the interaction.
+func (r *recorder) Read(p []byte) (n int, err error) {
 	if r.Conn != nil {
-		numRead, err := r.Conn.Read(b)
-		if numRead > 0 {
-			r.record(b[:numRead], false)
-		}
-
-		if err != nil {
-			r.recordErr(err, false)
-		}
-
-		return numRead, err
+		n, err = r.Conn.Read(p)
+		r.record(p[:n], false)
+		r.recordErr(err, false)
+		return n, err
 	}
 
 	if r.currentEvent >= len(r.events) {
@@ -77,22 +64,19 @@ func (r *recorder) Read(b []byte) (n int, err error) {
 		return 0, errors.New("Recorder expected Read, got Write! %#v, Event: %#v", r, event)
 	}
 
-	for i := 0; i < len(b); i++ {
-		if len(event.Event) == 0 {
-			return i, errors.New("Attempted to read past current event in recorder! Bytes: %s. Recorder %#v, Event; %#v", b, r, event)
-		}
-		b[i] = event.Event[0]
-		event.Event = event.Event[1:]
+	if len(p) > len(event.Event) {
+		return 0, errors.New("Attempted to read past current event in recorder! Bytes: %s. Recorder %#v, Event; %#v", p, r, event)
 	}
 
+	n = copy(p, event.Event)
+	event.Event = event.Event[n:]
 	if len(event.Event) == 0 {
 		r.currentEvent++
 	}
-
-	return len(b), nil
+	return n, nil
 }
 
-// Close the net conn, outputting the recording
+// Close the net.Conn, outputting the recording.
 func (r *recorder) Close() error {
 	if r.Conn != nil {
 		err := r.flush()
@@ -100,34 +84,25 @@ func (r *recorder) Close() error {
 			return err
 		}
 		return r.Conn.Close()
-	} else if len(r.events) > 0 {
+	}
+	if len(r.events) > 0 {
 		if r.currentEvent != len(r.events) {
 			return errors.New("Didn't read all of the events in the recorder on close! %#v", r)
 		}
-
 		if len(r.events[len(r.events)-1].Event) != 0 {
 			return errors.New("Left data in an event in the recorder on close! %#v", r)
 		}
-
-		return nil
 	}
-
 	return nil
 }
 
-// Write to the net conn, recording the interaction
+// Write to the net.Conn, recording the interaction.
 func (r *recorder) Write(b []byte) (n int, err error) {
 	if r.Conn != nil {
-		numWritten, err := r.Conn.Write(b)
-		if numWritten > 0 {
-			r.record(b[:numWritten], true)
-		}
-
-		if err != nil {
-			r.recordErr(err, true)
-		}
-
-		return numWritten, err
+		n, err = r.Conn.Write(b)
+		r.record(b[:n], true)
+		r.recordErr(err, true)
+		return n, err
 	}
 
 	if r.currentEvent >= len(r.events) {
@@ -138,21 +113,22 @@ func (r *recorder) Write(b []byte) (n int, err error) {
 		return 0, errors.New("Recorder expected Write, got Read! %#v, Event: %#v", r, event)
 	}
 
-	for i := 0; i < len(b); i++ {
-		if len(event.Event) == 0 {
-			return i, errors.New("Attempted to write past current event in recorder! %#v, Event: %#v", r, event)
-		}
-		event.Event = event.Event[1:]
+	if len(b) > len(event.Event) {
+		return 0, errors.New("Attempted to write past current event in recorder! Bytes: %s. Recorder %#v, Event; %#v", b, r, event)
 	}
 
+	event.Event = event.Event[len(b):]
 	if len(event.Event) == 0 {
 		r.currentEvent++
 	}
-
 	return len(b), nil
 }
 
 func (r *recorder) record(data []byte, isWrite bool) {
+	if len(data) == 0 {
+		return
+	}
+
 	event := r.lastEvent()
 	if event == nil || event.Completed || event.IsWrite != isWrite {
 		event = newEvent(isWrite)
@@ -160,44 +136,48 @@ func (r *recorder) record(data []byte, isWrite bool) {
 	}
 
 	event.Event = append(event.Event, data...)
-	if data[len(data)-2] == byte(0x00) && data[len(data)-1] == byte(0x00) {
-		event.Completed = true
-	}
+	event.Completed = bytes.HasSuffix(data, encoding.EndMessage)
 }
 
 func (r *recorder) recordErr(err error, isWrite bool) {
+	if err == nil {
+		return
+	}
+
 	event := r.lastEvent()
 	if event == nil || event.Completed || event.IsWrite != isWrite {
 		event = newEvent(isWrite)
 		r.events = append(r.events, event)
 	}
-
 	event.Error = err
 	event.Completed = true
 }
 
 func (r *recorder) load(name string) error {
-	file, err := os.OpenFile("./recordings/"+name+".json", os.O_RDONLY, 0660)
+	path := filepath.Join("recordings", name+".json")
+	file, err := os.OpenFile(path, os.O_RDONLY, 0660)
 	if err != nil {
 		return err
 	}
-
+	defer file.Close()
 	return json.NewDecoder(file).Decode(&r.events)
 }
 
 func (r *recorder) writeRecording() error {
-	file, err := os.OpenFile("./recordings/"+r.name+".json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0660)
+	path := filepath.Join("recordings", r.name+".json")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0660)
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 	return json.NewEncoder(file).Encode(r.events)
 }
 
 func (r *recorder) flush() error {
-	if os.Getenv("RECORD_OUTPUT") == "" {
-		return nil
+	if os.Getenv("RECORD_OUTPUT") != "" {
+		return r.writeRecording()
 	}
-	return r.writeRecording()
+	return nil
 }
 
 func (r *recorder) print() {
@@ -285,7 +265,6 @@ type Event struct {
 func newEvent(isWrite bool) *Event {
 	return &Event{
 		Timestamp: time.Now().UnixNano(),
-		Event:     []byte{},
 		IsWrite:   isWrite,
 	}
 }
