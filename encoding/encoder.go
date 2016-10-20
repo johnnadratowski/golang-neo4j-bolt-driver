@@ -3,7 +3,6 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 
@@ -145,8 +144,6 @@ func (e *Encoder) writeChunk() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(e.buf[:e.n], e.n, e.size)
-	fmt.Printf("(%d %d) %q\n", e.n, e.size, e.buf[:e.n])
 	_, err = e.w.Write(e.buf[:e.n])
 	e.n = 0
 	return err
