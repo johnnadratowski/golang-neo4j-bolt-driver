@@ -14,10 +14,9 @@ import (
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SelectOne", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SelectOne")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -65,10 +64,9 @@ func TestBoltStmt_SelectOne(t *testing.T) {
 }
 
 func TestBoltStmt_SelectMany(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SelectMany", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SelectMany")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -131,10 +129,9 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 }
 
 func TestBoltStmt_InvalidArgs(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_InvalidArgs", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_InvalidArgs")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -168,10 +165,9 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 }
 
 func TestBoltStmt_ExecNeo(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_ExecNeo", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_ExecNeo")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -259,10 +255,9 @@ func TestBoltStmt_ExecNeo(t *testing.T) {
 }
 
 func TestBoltStmt_CreateArgs(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_CreateArgs", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_CreateArgs")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -330,10 +325,9 @@ func TestBoltStmt_CreateArgs(t *testing.T) {
 }
 
 func TestBoltStmt_Discard(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_Discard", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_Discard")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -423,10 +417,9 @@ func TestBoltStmt_Discard(t *testing.T) {
 }
 
 func TestBoltStmt_Failure(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_Failure", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_Failure")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -528,10 +521,9 @@ func TestBoltStmt_Failure(t *testing.T) {
 }
 
 func TestBoltStmt_MixedObjects(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_MixedObjects", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_MixedObjects")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -589,10 +581,9 @@ func TestBoltStmt_MixedObjects(t *testing.T) {
 }
 
 func TestBoltStmt_Path(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_Path", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_Path")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -667,10 +658,9 @@ func TestBoltStmt_Path(t *testing.T) {
 }
 
 func TestBoltStmt_SingleRel(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SingleRel", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SingleRel")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -747,10 +737,9 @@ func TestBoltStmt_SingleRel(t *testing.T) {
 }
 
 func TestBoltStmt_SingleNode(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SingleNode", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SingleNode")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -827,10 +816,9 @@ func TestBoltStmt_SingleNode(t *testing.T) {
 }
 
 func TestBoltStmt_SelectIntLimits(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SelectIntLimits", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SelectIntLimits")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -903,10 +891,9 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectStringLimits(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SelectStringLimits", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SelectStringLimits")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -964,10 +951,9 @@ func TestBoltStmt_SelectStringLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectSliceLimits(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SelectSliceLimits", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SelectSliceLimits")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -1031,10 +1017,9 @@ func TestBoltStmt_SelectSliceLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectMapLimits(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_SelectMapLimits", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_SelectMapLimits")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -1109,10 +1094,9 @@ func TestBoltStmt_SelectMapLimits(t *testing.T) {
 }
 
 func TestBoltStmt_ManyChunks(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_ManyChunks", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_ManyChunks")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -1162,10 +1146,9 @@ func TestBoltStmt_ManyChunks(t *testing.T) {
 }
 
 func TestBoltStmt_PipelineExec(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_PipelineExec", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_PipelineExec")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -1289,10 +1272,9 @@ func TestBoltStmt_PipelineExec(t *testing.T) {
 }
 
 func TestBoltStmt_PipelineQuery(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_PipelineQuery", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_PipelineQuery")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -1409,10 +1391,9 @@ func TestBoltStmt_PipelineQuery(t *testing.T) {
 }
 
 func TestBoltStmt_PipelineQueryCloseBeginning(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_PipelineQueryCloseBeginning", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_PipelineQueryCloseBeginning")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -1486,10 +1467,9 @@ func TestBoltStmt_PipelineQueryCloseBeginning(t *testing.T) {
 }
 
 func TestBoltStmt_PipelineQueryCloseMiddle(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltStmt_PipelineQueryCloseMiddle", neo4jConnStr)
+	driver := NewRecorder("TestBoltStmt_PipelineQueryCloseMiddle")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {

@@ -1,16 +1,16 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/graph"
 	"io"
 	"testing"
+
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/graph"
 )
 
 func TestBoltTx_Commit(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltTx_Commit", neo4jConnStr)
+	driver := NewRecorder("TestBoltTx_Commit")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {
@@ -97,10 +97,9 @@ func TestBoltTx_Commit(t *testing.T) {
 }
 
 func TestBoltTx_Rollback(t *testing.T) {
-	driver := NewDriver()
 
 	// Records session for testing
-	driver.(*boltDriver).recorder = newRecorder("TestBoltTx_Rollback", neo4jConnStr)
+	driver := NewRecorder("TestBoltTx_Rollback")
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
 	if err != nil {

@@ -1,7 +1,6 @@
 package golangNeo4jBoltDriver
 
 import (
-	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql/driver"
@@ -30,28 +29,38 @@ import (
 type Conn interface {
 	// PrepareNeo prepares a neo4j specific statement.
 	PrepareNeo(query string) (Stmt, error)
+
 	// PreparePipeline prepares a neo4j specific pipeline statement
 	// Useful for running multiple queries at the same time.
 	PreparePipeline(query ...string) (PipelineStmt, error)
-	// QueryNeo queries using the neo4j-specific interface.
+
+	// QueryNeo queries using the Neo4j-specific interface.
 	QueryNeo(query string, params map[string]interface{}) (Rows, error)
-	// QueryNeoAll queries using the neo4j-specific interface and returns all row data and output metadata.
+
+	// QueryNeoAll queries using the Neo4j-specific interface and returns all row data and output metadata.
 	QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error)
-	// QueryPipeline queries using the neo4j-specific interface
+
+	// QueryPipeline queries using the Neo4j-specific interface
 	// pipelining multiple statements.
 	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
-	// ExecNeo executes a query using the neo4j-specific interface.
+
+	// ExecNeo executes a query using the Neo4j-specific interface.
 	ExecNeo(query string, params map[string]interface{}) (Result, error)
-	// ExecPipeline executes a query using the neo4j-specific interface
+
+	// ExecPipeline executes a query using the Neo4j-specific interface
 	// pipelining multiple statements.
 	ExecPipeline(query []string, params ...map[string]interface{}) ([]Result, error)
+
 	// Close closes the connection.
 	Close() error
+
 	// Begin starts a new transaction.
 	Begin() (driver.Tx, error)
+
 	// SetChunkSize is used to set the max chunk size of the
 	// bytes to send to Neo4j at once.
 	SetChunkSize(uint16)
+
 	// SetTimeout sets the read/write timeouts for the
 	// connection to Neo4j.
 	SetTimeout(time.Duration)
@@ -60,10 +69,8 @@ type Conn interface {
 type boltConn struct {
 	connStr       string
 	url           *url.URL
-	user          string
-	password      string
 	conn          net.Conn
-	serverVersion []byte
+	serverVersion [4]byte
 	timeout       time.Duration
 	chunkSize     uint16
 	closed        bool
@@ -74,27 +81,23 @@ type boltConn struct {
 	tlsNoVerify   bool
 	transaction   *boltTx
 	statement     *boltStmt
-	driver        *boltDriver
 	poolDriver    DriverPool
 }
 
 func createBoltConn(connStr string) *boltConn {
 	return &boltConn{
-		connStr:       connStr,
-		timeout:       time.Second * time.Duration(60),
-		chunkSize:     math.MaxUint16,
-		serverVersion: make([]byte, 4),
+		connStr:   connStr,
+		timeout:   time.Second * time.Duration(60),
+		chunkSize: math.MaxUint16,
 	}
 }
 
 // newBoltConn Creates a new bolt connection
-func newBoltConn(connStr string, driver *boltDriver) (*boltConn, error) {
+func newBoltConn(connStr string, rec *recorder) (*boltConn, error) {
 	c := createBoltConn(connStr)
-	c.driver = driver
-
-	err := c.initialize()
+	err := c.initialize(rec)
 	if err != nil {
-		return nil, errors.Wrap(err, "An error occurred initializing connection")
+		return nil, err
 	}
 	return c, nil
 }
@@ -106,63 +109,56 @@ func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
 	return c, nil
 }
 
-func (c *boltConn) parseURL() (*url.URL, error) {
-	user := ""
-	password := ""
-	url, err := url.Parse(c.connStr)
+func (c *boltConn) parseURL() (err error) {
+	c.url, err = url.Parse(c.connStr)
 	if err != nil {
-		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
-	}
-	if strings.ToLower(url.Scheme) != "bolt" {
-		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
+		return err
 	}
 
-	if url.User != nil {
-		c.user = url.User.Username()
-		var isSet bool
-		c.password, isSet = url.User.Password()
-		if !isSet {
-			return url, errors.New("Must specify password when passing user")
+	if strings.ToLower(c.url.Scheme) != "bolt" {
+		return errors.New("unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", c.url.Scheme)
+	}
+
+	if c.url.User != nil {
+		_, ok := c.url.User.Password()
+		if !ok {
+			return errors.New("must specify password when passing user")
 		}
 	}
 
-	timeout := url.Query().Get("timeout")
+	timeout := c.url.Query().Get("timeout")
 	if timeout != "" {
 		timeoutInt, err := strconv.Atoi(timeout)
 		if err != nil {
-			return url, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
+			return errors.New("invalid format for timeout: %s. Must be integer", timeout)
 		}
-
 		c.timeout = time.Duration(timeoutInt) * time.Second
 	}
 
-	useTLS := url.Query().Get("tls")
+	useTLS := c.url.Query().Get("tls")
 	c.useTLS = strings.HasPrefix(strings.ToLower(useTLS), "t") || useTLS == "1"
 
 	if c.useTLS {
-		c.certFile = url.Query().Get("tls_cert_file")
-		c.keyFile = url.Query().Get("tls_key_file")
-		c.caCertFile = url.Query().Get("tls_ca_cert_file")
-		noVerify := url.Query().Get("tls_no_verify")
+		c.certFile = c.url.Query().Get("tls_cert_file")
+		c.keyFile = c.url.Query().Get("tls_key_file")
+		c.caCertFile = c.url.Query().Get("tls_ca_cert_file")
+		noVerify := c.url.Query().Get("tls_no_verify")
 		c.tlsNoVerify = strings.HasPrefix(strings.ToLower(noVerify), "t") || noVerify == "1"
 	}
 
-	log.Trace("Bolt Host: ", url.Host)
+	log.Trace("Bolt Host: ", c.url.Host)
 	log.Trace("Timeout: ", c.timeout)
-	log.Trace("User: ", user)
-	log.Trace("Password: ", password)
 	log.Trace("TLS: ", c.useTLS)
 	log.Trace("TLS No Verify: ", c.tlsNoVerify)
 	log.Trace("Cert File: ", c.certFile)
 	log.Trace("Key File: ", c.keyFile)
 	log.Trace("CA Cert File: ", c.caCertFile)
 
-	return url, nil
+	return nil
 }
 
 func (c *boltConn) createConn() (net.Conn, error) {
-	var err error
-	c.url, err = c.parseURL()
+	err := c.parseURL()
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred parsing the conn URL")
 	}
@@ -207,61 +203,46 @@ func (c *boltConn) tlsConfig() (*tls.Config, error) {
 
 	if c.certFile != "" {
 		if c.keyFile == "" {
-			return nil, errors.New("If you're providing a cert file, you must also provide a key file")
+			return nil, errors.New("cert file requires a key file")
 		}
-
 		cert, err := tls.LoadX509KeyPair(c.certFile, c.keyFile)
 		if err != nil {
 			return nil, err
 		}
-
 		config.Certificates = []tls.Certificate{cert}
 	}
 
-	if c.tlsNoVerify {
-		config.InsecureSkipVerify = true
-	}
-
+	config.InsecureSkipVerify = c.tlsNoVerify
 	return config, nil
 }
 
 func (c *boltConn) handShake() error {
-	numWritten, err := c.Write(handShake)
-	if numWritten != 20 {
-		log.Errorf("Couldn't write expected bytes for magic preamble + supported versions. Written: %d. Expected: 4", numWritten)
-		if err != nil {
-			err = errors.Wrap(err, "An error occurred writing magic preamble + supported versions")
-		}
+	_, err := c.Write(handShake)
+	if err != nil {
 		return err
 	}
-
-	numRead, err := c.Read(c.serverVersion)
-	if numRead != 4 {
-		log.Errorf("Could not read server version response. Read %d bytes. Expected 4 bytes. Output: %s", numRead, c.serverVersion)
-		if err != nil {
-			err = errors.Wrap(err, "An error occurred reading server version")
-		}
+	_, err = io.ReadFull(c, c.serverVersion[:])
+	if err != nil {
 		return err
-	} else if bytes.Equal(c.serverVersion, noVersionSupported) {
+	}
+	if c.serverVersion == noVersionSupported {
 		return errors.New("Server responded with no supported version")
 	}
-
 	return nil
 }
 
-func (c *boltConn) initialize() error {
+func (c *boltConn) initialize(rec *recorder) (err error) {
 	// Handle recorder. If there is no conn string, assume we're playing back a recording.
 	// If there is a recorder and a conn string, assume we're recording the connection
-	// Else, just create the conn normally
-	var err error
-	if c.connStr == "" && c.driver != nil && c.driver.recorder != nil {
-		c.conn = c.driver.recorder
-	} else if c.driver != nil && c.driver.recorder != nil {
-		c.driver.recorder.Conn, err = c.createConn()
+	// Else, just create the conn normally.
+	if c.connStr == "" && rec != nil {
+		c.conn = rec
+	} else if rec != nil {
+		rec.Conn, err = c.createConn()
 		if err != nil {
 			return err
 		}
-		c.conn = c.driver.recorder
+		c.conn = rec
 	} else {
 		c.conn, err = c.createConn()
 		if err != nil {
@@ -269,29 +250,29 @@ func (c *boltConn) initialize() error {
 		}
 	}
 
-	if err := c.handShake(); err != nil {
+	if err = c.handShake(); err != nil {
 		if e := c.Close(); e != nil {
-			log.Errorf("An error occurred closing connection: %s", e)
+			return err
 		}
 		return err
 	}
 
-	respInt, err := c.sendInit()
+	resp, err := c.sendInit()
 	if err != nil {
 		if e := c.Close(); e != nil {
-			log.Errorf("An error occurred closing connection: %s", e)
+			return err
 		}
 		return err
 	}
 
-	switch resp := respInt.(type) {
+	switch resp := resp.(type) {
 	case messages.SuccessMessage:
 		log.Infof("Successfully initiated Bolt connection: %+v", resp)
 		return nil
 	default:
 		log.Errorf("Got an unrecognized message when initializing connection :%+v", resp)
 		if e := c.Close(); e != nil {
-			log.Errorf("An error occurred closing connection: %s", e)
+			return err
 		}
 		return errors.New("Unrecognized response from the server: %#v", resp)
 	}
@@ -299,44 +280,25 @@ func (c *boltConn) initialize() error {
 
 // Read reads the data from the underlying connection
 func (c *boltConn) Read(b []byte) (n int, err error) {
-	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, errors.Wrap(err, "An error occurred setting read deadline")
+	err = c.conn.SetReadDeadline(time.Now().Add(c.timeout))
+	if err != nil {
+		return 0, err
 	}
-
-	n, err = c.conn.Read(b)
-
-	if log.GetLevel() >= log.TraceLevel {
-		log.Tracef("Read %d bytes from stream:\n\n%s\n", n, sprintByteHex(b))
-	}
-
-	if err != nil && err != io.EOF {
-		err = errors.Wrap(err, "An error occurred reading from stream")
-	}
-	return n, err
+	return c.conn.Read(b)
 }
 
 // Write writes the data to the underlying connection
 func (c *boltConn) Write(b []byte) (n int, err error) {
-	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, errors.Wrap(err, "An error occurred setting write deadline")
-	}
-
-	n, err = c.conn.Write(b)
-
-	if log.GetLevel() >= log.TraceLevel {
-		log.Tracef("Wrote %d of %d bytes to stream:\n\n%s\n", len(b), n, sprintByteHex(b[:n]))
-	}
-
+	err = c.conn.SetWriteDeadline(time.Now().Add(c.timeout))
 	if err != nil {
-		err = errors.Wrap(err, "An error occurred writing to stream")
+		return 0, err
 	}
-	return n, err
+	return c.conn.Write(b)
 }
 
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
 func (c *boltConn) Close() error {
-
 	if c.closed {
 		return nil
 	}
@@ -366,11 +328,8 @@ func (c *boltConn) Close() error {
 	}
 
 	err := c.conn.Close()
-	c.closed = true
-	if err != nil {
-		return errors.Wrap(err, "An error occurred closing the connection")
-	}
-	return nil
+	c.closed = err == nil
+	return err
 }
 
 func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
@@ -383,12 +342,12 @@ func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
 	}
 
 	for {
-		respInt, err := encoding.NewDecoder(c).Decode()
+		resp, err := encoding.NewDecoder(c).Decode()
 		if err != nil {
 			return errors.Wrap(err, "An error occurred decoding ack failure message response")
 		}
 
-		switch resp := respInt.(type) {
+		switch resp := resp.(type) {
 		case messages.IgnoredMessage:
 			log.Infof("Got ignored message when acking failure: %#v", resp)
 			continue
@@ -419,12 +378,12 @@ func (c *boltConn) reset() error {
 	}
 
 	for {
-		respInt, err := encoding.NewDecoder(c).Decode()
+		resp, err := encoding.NewDecoder(c).Decode()
 		if err != nil {
 			return errors.Wrap(err, "An error occurred decoding reset message response")
 		}
 
-		switch resp := respInt.(type) {
+		switch resp := resp.(type) {
 		case messages.IgnoredMessage:
 			log.Infof("Got ignored message when resetting session: %#v", resp)
 			continue
@@ -529,16 +488,16 @@ func (c *boltConn) SetTimeout(timeout time.Duration) {
 func (c *boltConn) consume() (interface{}, error) {
 	log.Info("Consuming response from bolt stream")
 
-	respInt, err := encoding.NewDecoder(c).Decode()
+	resp, err := encoding.NewDecoder(c).Decode()
 	if err != nil {
-		return respInt, err
+		return resp, err
 	}
 
 	if log.GetLevel() >= log.TraceLevel {
-		log.Tracef("Consumed Response: %#v", respInt)
+		log.Tracef("Consumed Response: %#v", resp)
 	}
 
-	if failure, isFail := respInt.(messages.FailureMessage); isFail {
+	if failure, isFail := resp.(messages.FailureMessage); isFail {
 		log.Errorf("Got failure message: %#v", failure)
 		err := c.ackFailure(failure)
 		if err != nil {
@@ -547,7 +506,7 @@ func (c *boltConn) consume() (interface{}, error) {
 		return failure, errors.New("Got failure message: %#v", failure)
 	}
 
-	return respInt, err
+	return resp, err
 }
 
 func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
@@ -555,17 +514,17 @@ func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
 
 	responses := []interface{}{}
 	for {
-		respInt, err := c.consume()
+		resp, err := c.consume()
 		if err != nil {
-			return nil, respInt, err
+			return nil, resp, err
 		}
 
-		if success, isSuccess := respInt.(messages.SuccessMessage); isSuccess {
+		if success, isSuccess := resp.(messages.SuccessMessage); isSuccess {
 			log.Infof("Got success message: %#v", success)
 			return responses, success, nil
 		}
 
-		responses = append(responses, respInt)
+		responses = append(responses, resp)
 	}
 }
 
@@ -589,9 +548,12 @@ func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{},
 }
 
 func (c *boltConn) sendInit() (interface{}, error) {
-	log.Infof("Sending INIT Message. ClientID: %s User: %s Password: %s", ClientID, c.user, c.password)
-
-	initMessage := messages.NewInitMessage(ClientID, c.user, c.password)
+	var user, pass string
+	if info := c.url.User; info != nil {
+		user = info.Username()
+		pass, _ = info.Password()
+	}
+	initMessage := messages.NewInitMessage(ClientID, user, pass)
 	if err := encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
 		return nil, errors.Wrap(err, "An error occurred sending init message")
 	}

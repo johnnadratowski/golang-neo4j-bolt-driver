@@ -2,8 +2,8 @@ package golangNeo4jBoltDriver
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 )
 
 // recorder records a given session with Neo4j.
@@ -24,13 +23,36 @@ type recorder struct {
 	currentEvent int
 }
 
-func newRecorder(name string, connStr string) *recorder {
-	r := &recorder{name: name, connStr: connStr}
-	if r.connStr == "" {
-		if err := r.load(r.name); err != nil {
-			log.Fatalf("Couldn't load data from recording files!: %s", err)
+// NewRecorder initializes a Driver that records the session. Name will be the
+// name of the gzipped JSON file containing the recorded session.
+func NewRecorder(name string) Driver {
+	return &recorder{name: name}
+}
+
+// Open opens a new Bolt connection to the Neo4J database
+func (r *recorder) Open(connStr string) (driver.Conn, error) {
+	if connStr == "" {
+		err := r.load(r.name)
+		if err != nil {
+			return nil, errors.New("couldn't load data from recording file")
 		}
 	}
+	return newBoltConn(connStr, r)
+}
+
+// Open opens a new Bolt connection to the Neo4J database. Implements a Neo-friendly alternative to sql/driver.
+func (r *recorder) OpenNeo(connStr string) (Conn, error) {
+	if connStr == "" {
+		err := r.load(r.name)
+		if err != nil {
+			return nil, errors.New("couldn't load data from recording file")
+		}
+	}
+	return newBoltConn(connStr, r)
+}
+
+func newRecorder(name string, connStr string) *recorder {
+	r := &recorder{name: name, connStr: connStr}
 	return r
 }
 
@@ -177,44 +199,6 @@ func (r *recorder) flush() error {
 		return r.writeRecording()
 	}
 	return nil
-}
-
-func (r *recorder) print() {
-	fmt.Println("PRINTING RECORDING " + r.name)
-
-	for _, event := range r.events {
-
-		fmt.Println()
-		fmt.Println()
-
-		typee := "READ"
-		if event.IsWrite {
-			typee = "WRITE"
-		}
-		fmt.Printf("%s @ %d:\n\n", typee, event.Timestamp)
-
-		decoded, err := encoding.NewDecoder(bytes.NewBuffer(event.Event)).Decode()
-		if err != nil {
-			fmt.Printf("Error decoding data! Error: %s\n", err)
-		} else {
-			fmt.Printf("Decoded Data:\n\n%+v\n\n", decoded)
-		}
-
-		fmt.Print("Encoded Bytes:\n\n")
-		fmt.Print(sprintByteHex(event.Event))
-		if !event.Completed {
-			fmt.Println("EVENT NEVER COMPLETED!!!!!!!!!!!!!!!")
-		}
-
-		if event.Error != nil {
-			fmt.Printf("ERROR OCCURRED DURING EVENT!!!!!!!\n\nError: %s\n", event.Error)
-		}
-
-		fmt.Println()
-		fmt.Println()
-	}
-
-	fmt.Println("RECORDING END " + r.name)
 }
 
 func (r *recorder) LocalAddr() net.Addr {

@@ -192,18 +192,18 @@ func (s *boltStmt) queryNeo(params map[string]interface{}) (*boltRows, error) {
 		return nil, errors.New("Another query is already open")
 	}
 
-	respInt, err := s.conn.sendRunConsume(s.query, params)
+	resp, err := s.conn.sendRunConsume(s.query, params)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, ok := respInt.(messages.SuccessMessage)
+	success, ok := resp.(messages.SuccessMessage)
 	if !ok {
 		return nil, errors.New("Unrecognized response type running query: %#v", resp)
 	}
 
 	log.Infof("Got success message on run query: %#v", resp)
-	s.rows = newRows(s, resp.Metadata)
+	s.rows = newRows(s, success.Metadata)
 	return s.rows, nil
 }
 

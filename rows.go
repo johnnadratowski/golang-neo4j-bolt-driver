@@ -125,12 +125,12 @@ func (r *boltRows) Close() error {
 
 	if !r.consumed {
 		// Discard all messages if not consumed
-		respInt, err := r.statement.conn.sendDiscardAllConsume()
+		resp, err := r.statement.conn.sendDiscardAllConsume()
 		if err != nil {
 			return errors.Wrap(err, "An error occurred discarding messages on row close")
 		}
 
-		switch resp := respInt.(type) {
+		switch resp := resp.(type) {
 		case messages.SuccessMessage:
 			log.Infof("Got success message: %#v", resp)
 		default:
@@ -211,12 +211,12 @@ func (r *boltRows) NextNeo() ([]interface{}, map[string]interface{}, error) {
 		}
 	}
 
-	respInt, err := r.statement.conn.consume()
+	resp, err := r.statement.conn.consume()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	switch resp := respInt.(type) {
+	switch resp := resp.(type) {
 	case messages.SuccessMessage:
 		log.Infof("Got success message: %#v", resp)
 		r.finishedConsume = true
@@ -252,12 +252,12 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 		return nil, nil, nil, errors.New("Rows are already closed")
 	}
 
-	respInt, err := r.statement.conn.consume()
+	resp, err := r.statement.conn.consume()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	switch resp := respInt.(type) {
+	switch resp := resp.(type) {
 	case messages.SuccessMessage:
 		log.Infof("Got success message: %#v", resp)
 

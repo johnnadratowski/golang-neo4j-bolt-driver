@@ -14,7 +14,10 @@ var (
 		0x00, 0x00, 0x00, 0x00,
 	}
 	handShake          = append(magicPreamble, supportedVersions...)
-	noVersionSupported = []byte{0x00, 0x00, 0x00, 0x00}
+	noVersionSupported = [4]byte{0x00, 0x00, 0x00, 0x00}
+)
+
+const (
 	// Version is the current version of this driver
 	Version = "1.0"
 	// ClientID is the id of this client
@@ -33,14 +36,13 @@ type Driver interface {
 	// Open opens a sql.driver compatible connection. Used internally
 	// by the go sql interface
 	Open(string) (driver.Conn, error)
+
 	// OpenNeo opens a Neo-specific connection. This should be used
 	// directly when not using the golang sql interface
 	OpenNeo(string) (Conn, error)
 }
 
-type boltDriver struct {
-	recorder *recorder
-}
+type boltDriver struct{}
 
 // NewDriver creates a new Driver object
 func NewDriver() Driver {
@@ -49,12 +51,12 @@ func NewDriver() Driver {
 
 // Open opens a new Bolt connection to the Neo4J database
 func (d *boltDriver) Open(connStr string) (driver.Conn, error) {
-	return newBoltConn(connStr, d) // Never use pooling when using SQL driver
+	return newBoltConn(connStr, nil) // Never use pooling when using SQL driver
 }
 
 // Open opens a new Bolt connection to the Neo4J database. Implements a Neo-friendly alternative to sql/driver.
 func (d *boltDriver) OpenNeo(connStr string) (Conn, error) {
-	return newBoltConn(connStr, d)
+	return newBoltConn(connStr, nil)
 }
 
 // DriverPool is a driver allowing connection to Neo4j with support for connection pooling
@@ -83,16 +85,13 @@ func NewDriverPool(connStr string, max int) (DriverPool, error) {
 		maxConns: max,
 		pool:     make(chan *boltConn, max),
 	}
-
 	for i := 0; i < max; i++ {
 		conn, err := newPooledBoltConn(connStr, d)
 		if err != nil {
 			return nil, err
 		}
-
 		d.pool <- conn
 	}
-
 	return d, nil
 }
 
@@ -100,7 +99,7 @@ func NewDriverPool(connStr string, max int) (DriverPool, error) {
 func (d *boltDriverPool) OpenPool() (Conn, error) {
 	conn := <-d.pool
 	if conn.conn == nil {
-		if err := conn.initialize(); err != nil {
+		if err := conn.initialize(nil); err != nil {
 			return nil, err
 		}
 	}
@@ -118,4 +117,5 @@ func (d *boltDriverPool) reclaim(conn *boltConn) {
 
 func init() {
 	sql.Register("neo4j-bolt", &boltDriver{})
+	sql.Register("neo4j-bolt-recorder", &recorder{})
 }
