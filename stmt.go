@@ -11,7 +11,7 @@ import (
 // Stmt represents a statement to run against the database
 //
 // Stmt objects, and any rows prepared within ARE NOT
-// THREAD SAFE.  If you want to use multiple go routines with these objects,
+// THREAD SAFE. If you want to use multiple go routines with these objects,
 // you should use a driver to create a new conn for each routine.
 type Stmt interface {
 	// Close Closes the statement. See sql/driver.Stmt.
@@ -25,7 +25,7 @@ type Stmt interface {
 // PipelineStmt represents a set of statements to run against the database
 //
 // PipelineStmt objects, and any rows prepared within ARE NOT
-// THREAD SAFE.  If you want to use multiple go routines with these objects,
+// THREAD SAFE. If you want to use multiple go routines with these objects,
 // you should use a driver to create a new conn for each routine.
 type PipelineStmt interface {
 	// Close Closes the statement. See sql/driver.Stmt.

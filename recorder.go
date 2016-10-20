@@ -26,7 +26,6 @@ type recorder struct {
 
 func newRecorder(name string, connStr string) *recorder {
 	r := &recorder{name: name, connStr: connStr}
-
 	if r.connStr == "" {
 		if err := r.load(r.name); err != nil {
 			log.Fatalf("Couldn't load data from recording files!: %s", err)

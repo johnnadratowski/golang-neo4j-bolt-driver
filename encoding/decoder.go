@@ -41,6 +41,7 @@ func (b *boltReader) next() error {
 	return nil
 }
 
+// Read implements io.Reader.
 func (b *boltReader) Read(p []byte) (n int, err error) {
 	if b.length <= 0 {
 		err = b.next()

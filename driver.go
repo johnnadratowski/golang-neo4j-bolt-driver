@@ -21,17 +21,14 @@ var (
 	ClientID = "GolangNeo4jBolt/" + Version
 )
 
-// Driver is a driver allowing connection to Neo4j
-// The driver allows you to open a new connection to Neo4j
+// Driver allows connections to Neo4j. It implements driver.Driver and also
+// includes its own more Neo-friendly interfaces. Some of the features of this
+// interface implement neo-specific features unavailable in the driver.Driver
+// compatible interface
 //
-// Implements sql/driver, but also includes its own more neo-friendly interface.
-// Some of the features of this interface implement neo-specific features
-// unavailable in the sql/driver compatible interface
-//
-// Driver objects should be THREAD SAFE, so you can use them
-// to open connections in multiple threads.  The connection objects
-// themselves, and any prepared statements/transactions within ARE NOT
-// THREAD SAFE.
+// Driver objects should be thread safe, so you can use them to open connections
+// in multiple threads. The connection objects themselves, and any prepared
+// statements/transactions within, are not thread safe.
 type Driver interface {
 	// Open opens a sql.driver compatible connection. Used internally
 	// by the go sql interface
@@ -64,7 +61,7 @@ func (d *boltDriver) OpenNeo(connStr string) (Conn, error) {
 // The driver allows you to open a new connection to Neo4j
 //
 // Driver objects should be THREAD SAFE, so you can use them
-// to open connections in multiple threads.  The connection objects
+// to open connections in multiple threads. The connection objects
 // themselves, and any prepared statements/transactions within ARE NOT
 // THREAD SAFE.
 type DriverPool interface {
