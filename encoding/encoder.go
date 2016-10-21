@@ -436,7 +436,7 @@ func (e *Encoder) encodeStructure(val structures.Structure) (err error) {
 	length := len(fields)
 	switch {
 	case length <= 15:
-		_, err = e.w.Write([]byte{byte(TinyStructMarker + length)})
+		err = e.w.writeMarker(TinyStructMarker + uint8(length))
 		if err != nil {
 			return err
 		}

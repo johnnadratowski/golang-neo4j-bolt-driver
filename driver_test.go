@@ -1,13 +1,15 @@
 package golangNeo4jBoltDriver
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"time"
 
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 	"sync"
+
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 )
 
 var (
@@ -35,10 +37,9 @@ func TestMain(m *testing.M) {
 }
 
 func clearNeo() {
-	driver := NewDriver()
-	conn, err := driver.OpenNeo(neo4jConnStr)
+	conn, err := OpenNeo(neo4jConnStr)
 	if err != nil {
-		panic("Error getting conn to clear DB")
+		panic(fmt.Sprintf("error getting conn to clear DB: %s\n", err))
 	}
 
 	stmt, err := conn.PrepareNeo(`MATCH (n) DETACH DELETE n`)

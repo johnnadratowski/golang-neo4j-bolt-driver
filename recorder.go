@@ -16,44 +16,51 @@ import (
 // recorder records a given session with Neo4j.
 // allows for playback of sessions as well
 type recorder struct {
-	net.Conn
-	name         string
-	events       []*Event
-	connStr      string
-	currentEvent int
+	conn   net.Conn
+	name   string
+	events []*Event
+	cur    int
 }
 
 // NewRecorder initializes a Driver that records the session. Name will be the
 // name of the gzipped JSON file containing the recorded session.
-func NewRecorder(name string) Driver {
+func NewRecorder(name string) interface {
+	driver.Driver
+	OpenNeo(string) (Conn, error)
+} {
 	return &recorder{name: name}
 }
 
-// Open opens a new Bolt connection to the Neo4J database
-func (r *recorder) Open(connStr string) (driver.Conn, error) {
-	if connStr == "" {
-		err := r.load(r.name)
-		if err != nil {
-			return nil, errors.New("couldn't load data from recording file")
-		}
-	}
-	return newBoltConn(connStr, r)
+const defaultTimeout = 5
+
+// Open opens a simulated Neo4j connection using pre-recorded data if name is
+// an empty string. Otherwise, it opens up an actual connection using that to
+// create a new recording.
+func (r *recorder) Open(name string) (driver.Conn, error) {
+	return r.open(name)
 }
 
-// Open opens a new Bolt connection to the Neo4J database. Implements a Neo-friendly alternative to sql/driver.
-func (r *recorder) OpenNeo(connStr string) (Conn, error) {
-	if connStr == "" {
-		err := r.load(r.name)
-		if err != nil {
-			return nil, errors.New("couldn't load data from recording file")
-		}
-	}
-	return newBoltConn(connStr, r)
+// Open opens a simulated Neo4j connection using pre-recorded data if name is
+// an empty string. Otherwise, it opens up an actual connection using that to
+// create a new recording.
+func (r *recorder) OpenNeo(name string) (Conn, error) {
+	return r.open(name)
 }
 
-func newRecorder(name string, connStr string) *recorder {
-	r := &recorder{name: name, connStr: connStr}
-	return r
+func (r *recorder) open(name string) (*boltConn, error) {
+	if name == "" {
+		err := r.load()
+		if err != nil {
+			return nil, err
+		}
+		return &boltConn{conn: r, timeout: defaultTimeout}, nil
+	}
+	b, err := open(&dialer{}, name)
+	if err != nil {
+		return nil, err
+	}
+	r.conn, b.conn = b.conn, r
+	return b, nil
 }
 
 func (r *recorder) completedLast() bool {
@@ -70,17 +77,17 @@ func (r *recorder) lastEvent() *Event {
 
 // Read reads from the net.Conn, recording the interaction.
 func (r *recorder) Read(p []byte) (n int, err error) {
-	if r.Conn != nil {
-		n, err = r.Conn.Read(p)
+	if r.conn != nil {
+		n, err = r.conn.Read(p)
 		r.record(p[:n], false)
 		r.recordErr(err, false)
 		return n, err
 	}
 
-	if r.currentEvent >= len(r.events) {
+	if r.cur >= len(r.events) {
 		return 0, errors.New("Trying to read past all of the events in the recorder! %#v", r)
 	}
-	event := r.events[r.currentEvent]
+	event := r.events[r.cur]
 	if event.IsWrite {
 		return 0, errors.New("Recorder expected Read, got Write! %#v, Event: %#v", r, event)
 	}
@@ -92,22 +99,22 @@ func (r *recorder) Read(p []byte) (n int, err error) {
 	n = copy(p, event.Event)
 	event.Event = event.Event[n:]
 	if len(event.Event) == 0 {
-		r.currentEvent++
+		r.cur++
 	}
 	return n, nil
 }
 
 // Close the net.Conn, outputting the recording.
 func (r *recorder) Close() error {
-	if r.Conn != nil {
+	if r.conn != nil {
 		err := r.flush()
 		if err != nil {
 			return err
 		}
-		return r.Conn.Close()
+		return r.conn.Close()
 	}
 	if len(r.events) > 0 {
-		if r.currentEvent != len(r.events) {
+		if r.cur != len(r.events) {
 			return errors.New("Didn't read all of the events in the recorder on close! %#v", r)
 		}
 		if len(r.events[len(r.events)-1].Event) != 0 {
@@ -119,17 +126,17 @@ func (r *recorder) Close() error {
 
 // Write to the net.Conn, recording the interaction.
 func (r *recorder) Write(b []byte) (n int, err error) {
-	if r.Conn != nil {
-		n, err = r.Conn.Write(b)
+	if r.conn != nil {
+		n, err = r.conn.Write(b)
 		r.record(b[:n], true)
 		r.recordErr(err, true)
 		return n, err
 	}
 
-	if r.currentEvent >= len(r.events) {
+	if r.cur >= len(r.events) {
 		return 0, errors.New("Trying to write past all of the events in the recorder! %#v", r)
 	}
-	event := r.events[r.currentEvent]
+	event := r.events[r.cur]
 	if !event.IsWrite {
 		return 0, errors.New("Recorder expected Write, got Read! %#v, Event: %#v", r, event)
 	}
@@ -140,7 +147,7 @@ func (r *recorder) Write(b []byte) (n int, err error) {
 
 	event.Event = event.Event[len(b):]
 	if len(event.Event) == 0 {
-		r.currentEvent++
+		r.cur++
 	}
 	return len(b), nil
 }
@@ -174,9 +181,12 @@ func (r *recorder) recordErr(err error, isWrite bool) {
 	event.Completed = true
 }
 
-func (r *recorder) load(name string) error {
-	path := filepath.Join("recordings", name+".json")
+func (r *recorder) load() error {
+	path := filepath.Join("recordings", r.name+".json")
 	file, err := os.OpenFile(path, os.O_RDONLY, 0660)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -202,36 +212,36 @@ func (r *recorder) flush() error {
 }
 
 func (r *recorder) LocalAddr() net.Addr {
-	if r.Conn != nil {
-		return r.Conn.LocalAddr()
+	if r.conn != nil {
+		return r.conn.LocalAddr()
 	}
 	return nil
 }
 
 func (r *recorder) RemoteAddr() net.Addr {
-	if r.Conn != nil {
-		return r.Conn.RemoteAddr()
+	if r.conn != nil {
+		return r.conn.RemoteAddr()
 	}
 	return nil
 }
 
 func (r *recorder) SetDeadline(t time.Time) error {
-	if r.Conn != nil {
-		return r.Conn.SetDeadline(t)
+	if r.conn != nil {
+		return r.conn.SetDeadline(t)
 	}
 	return nil
 }
 
 func (r *recorder) SetReadDeadline(t time.Time) error {
-	if r.Conn != nil {
-		return r.Conn.SetReadDeadline(t)
+	if r.conn != nil {
+		return r.conn.SetReadDeadline(t)
 	}
 	return nil
 }
 
 func (r *recorder) SetWriteDeadline(t time.Time) error {
-	if r.Conn != nil {
-		return r.Conn.SetWriteDeadline(t)
+	if r.conn != nil {
+		return r.conn.SetWriteDeadline(t)
 	}
 	return nil
 }
