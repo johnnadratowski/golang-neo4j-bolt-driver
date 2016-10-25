@@ -3,6 +3,7 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
@@ -109,7 +110,7 @@ func (d *Decoder) Decode() (interface{}, error) {
 	var eof uint16
 	err = d.read(&eof)
 	if eof != 0 {
-		return nil, errors.New("invalid eof")
+		return nil, fmt.Errorf("%s", "invalid eof")
 	}
 	return v, nil
 }

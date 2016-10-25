@@ -13,23 +13,17 @@ type InitMessage struct {
 
 // NewInitMessage Gets a new InitMessage struct
 func NewInitMessage(clientName string, user string, password string) InitMessage {
-	var authToken map[string]interface{}
+	msg := InitMessage{clientName: clientName}
 	if user == "" {
-		authToken = map[string]interface{}{
-			"scheme": "none",
-		}
+		msg.authToken = map[string]interface{}{"scheme": "none"}
 	} else {
-		authToken = map[string]interface{}{
+		msg.authToken = map[string]interface{}{
 			"scheme":      "basic",
 			"principal":   user,
 			"credentials": password,
 		}
 	}
-
-	return InitMessage{
-		clientName: clientName,
-		authToken:  authToken,
-	}
+	return msg
 }
 
 // Signature gets the signature byte for the struct

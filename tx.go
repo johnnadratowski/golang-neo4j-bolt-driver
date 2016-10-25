@@ -15,14 +15,12 @@ type Tx interface {
 }
 
 type boltTx struct {
-	conn   *boltConn
+	conn   *conn
 	closed bool
 }
 
-func newTx(conn *boltConn) *boltTx {
-	return &boltTx{
-		conn: conn,
-	}
+func newTx(con *conn) *boltTx {
+	return &boltTx{conn: con}
 }
 
 // Commit commits and closes the transaction

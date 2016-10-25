@@ -59,17 +59,17 @@ func TestBoltConn_Close(t *testing.T) {
 	// Records session for testing
 	rec := NewRecorder("TestBoltConn_Close")
 
-	conn, err := rec.OpenNeo(neo4jConnStr)
+	cn, err := rec.OpenNeo(neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
 
-	err = conn.Close()
+	err = cn.Close()
 	if err != nil {
 		t.Fatalf("An error occurred closing conn: %s", err)
 	}
 
-	if !conn.(*boltConn).closed {
+	if !cn.(*conn).closed {
 		t.Error("Conn not closed at end of test")
 	}
 }

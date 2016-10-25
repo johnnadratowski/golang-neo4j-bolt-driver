@@ -47,20 +47,20 @@ func (r *recorder) OpenNeo(name string) (Conn, error) {
 	return r.open(name)
 }
 
-func (r *recorder) open(name string) (*boltConn, error) {
+func (r *recorder) open(name string) (*conn, error) {
 	if name == "" {
 		err := r.load()
 		if err != nil {
 			return nil, err
 		}
-		return &boltConn{conn: r, timeout: defaultTimeout}, nil
+		return newConn(r, nil)
 	}
-	b, err := open(&dialer{}, name)
+	conn, v, err := open(&dialer{}, name)
 	if err != nil {
 		return nil, err
 	}
-	r.conn, b.conn = b.conn, r
-	return b, nil
+	r.conn = conn
+	return newConn(r, v)
 }
 
 func (r *recorder) completedLast() bool {

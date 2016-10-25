@@ -40,17 +40,17 @@ type PipelineStmt interface {
 type boltStmt struct {
 	queries []string
 	query   string
-	conn    *boltConn
+	conn    *conn
 	closed  bool
 	rows    *boltRows
 }
 
-func newStmt(query string, conn *boltConn) *boltStmt {
-	return &boltStmt{query: query, conn: conn}
+func newStmt(query string, con *conn) *boltStmt {
+	return &boltStmt{query: query, conn: con}
 }
 
-func newPipelineStmt(queries []string, conn *boltConn) *boltStmt {
-	return &boltStmt{queries: queries, conn: conn}
+func newPipelineStmt(queries []string, con *conn) *boltStmt {
+	return &boltStmt{queries: queries, conn: con}
 }
 
 // Close Closes the statement. See sql/driver.Stmt.

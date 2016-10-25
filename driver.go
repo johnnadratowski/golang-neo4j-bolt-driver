@@ -35,9 +35,26 @@ const (
 	ClientID = "GolangNeo4jBolt/" + Version
 )
 
+type pool struct {
+	drv *drv
+}
+
+func (p *pool) Prepare(query string) (stmt Stmt, err error) {
+	for i := 0; i < 2; i++ {
+		stmt, err = p.prepare(query)
+	}
+}
+
+// OpenPool opens a connection pool similar to sql.Open. Non-Neo specific
+// pooling should be done the traditional way, through sql.Open.
+func OpenPool(name string) (Conn, error) {
+	return &pool{drv: drv}
+}
+
 // Open calls DialOpen with the default dialer.
 func Open(name string) (driver.Conn, error) {
-	if os.Getenv(TLSEnv) == "1" {
+	env := os.Getenv(TLSEnv)
+	if env == "1" || env == "true" {
 		drv, err := TLSDialer("", "", "", false)
 		if err != nil {
 			return nil, err
@@ -49,7 +66,8 @@ func Open(name string) (driver.Conn, error) {
 
 // OpenNeo calls DialOpenNeo with the default dialer.
 func OpenNeo(name string) (Conn, error) {
-	if os.Getenv(TLSEnv) == "1" {
+	env := os.Getenv(TLSEnv)
+	if env == "1" || env == "true" {
 		drv, err := TLSDialer("", "", "", false)
 		if err != nil {
 			return nil, err
@@ -116,6 +134,12 @@ func parseURL(v values, name string) error {
 	if err != nil {
 		return err
 	}
+	host, port, err := net.SplitHostPort(url.Host)
+	if err != nil {
+		return err
+	}
+	v.set("host", host)
+	v.set("port", port)
 	if url.User != nil {
 		pw, ok := url.User.Password()
 		if !ok {
@@ -186,10 +210,26 @@ func TLSDialer(caFile, certFile, keyFile string, noVerify bool) (Dialer, error) 
 
 // DialOpen opens a driver.Conn with the given Dialer and network configuration.
 func DialOpen(d Dialer, name string) (driver.Conn, error) {
-	return open(d, name)
+	conn, v, err := open(d, name)
+	if err != nil {
+		return nil, err
+	}
+	return newConn(conn, v)
 }
 
-func open(d Dialer, name string) (*boltConn, error) {
+// parseTimeout returns the timeout in seconds.
+func parseTimeout(tos string) (time.Duration, error) {
+	if tos == "" || tos == "0" {
+		return 0, nil
+	}
+	timeout, err := strconv.ParseInt(tos, 0, 0)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(timeout) * time.Second, nil
+}
+
+func open(d Dialer, name string) (net.Conn, values, error) {
 	// Default Neo4j configuration information.
 	v := values{"host": "localhost", "port": "7474"}
 
@@ -201,37 +241,25 @@ func open(d Dialer, name string) (*boltConn, error) {
 	if strings.HasPrefix(name, "bolt://") {
 		err := parseURL(v, name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	conn, err := dial(d, v)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	var timeout int64
-	if tos := v.get("timeout"); tos != "" && tos != "0" {
-		timeout, err = strconv.ParseInt(v.get("timeout"), 0, 0)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return newBoltConn(
-		conn, time.Duration(timeout)*time.Second,
-		v.get("username"), v.get("password"),
-	)
+	return conn, v, nil
 }
 
 func dial(d Dialer, v values) (net.Conn, error) {
 	addr := net.JoinHostPort(v.get("host"), v.get("port"))
-	dto := v.get("dial_timeout")
-	if dto != "" && dto != "0" {
-		sec, err := strconv.ParseInt(dto, 0, 0)
-		if err != nil {
-			return nil, nil
-		}
-		return d.DialTimeout("tcp", addr, time.Duration(sec)*time.Second)
+	timeout, err := parseTimeout(v.get("dial_timeout"))
+	if err != nil {
+		return nil, err
+	}
+	if timeout != 0 {
+		return d.DialTimeout("tcp", addr, timeout)
 		if err != nil {
 			return nil, err
 		}
@@ -241,7 +269,11 @@ func dial(d Dialer, v values) (net.Conn, error) {
 
 // DialOpenNeo opens an Conn with the given Dialer and network configuration.
 func DialOpenNeo(d Dialer, name string) (Conn, error) {
-	return open(d, name)
+	conn, v, err := open(d, name)
+	if err != nil {
+		return nil, err
+	}
+	return newConn(conn, v)
 }
 
 // Dialer is a generic interface for types that can dial network addresses.
@@ -276,10 +308,10 @@ func (d *dialer) DialTimeout(network, addr string, timeout time.Duration) (net.C
 	return net.DialTimeout(network, addr, timeout)
 }
 
-type boltDriver struct{}
+type drv struct{}
 
 // Open opens a new Bolt connection to the Neo4J database
-func (d *boltDriver) Open(name string) (driver.Conn, error) {
+func (d *drv) Open(name string) (driver.Conn, error) {
 	return Open(name)
 }
 
@@ -294,13 +326,13 @@ type DriverPool interface {
 	// OpenPool opens a Neo-specific connection.
 	OpenPool() (Conn, error)
 
-	reclaim(*boltConn)
+	reclaim(*conn)
 }
 
 type boltDriverPool struct {
 	connStr  string
 	maxConns int
-	pool     chan *boltConn
+	pool     chan *conn
 }
 
 // NewDriverPool creates a new Driver object with connection pooling
@@ -308,10 +340,10 @@ func NewDriverPool(connStr string, max int) (DriverPool, error) {
 	d := &boltDriverPool{
 		connStr:  connStr,
 		maxConns: max,
-		pool:     make(chan *boltConn, max),
+		pool:     make(chan *conn, max),
 	}
 	for i := 0; i < max; i++ {
-		d.pool <- &boltConn{pool: d}
+		d.pool <- &conn{pool: d, size: DefaultChunkSize}
 	}
 	return d, nil
 }
@@ -322,13 +354,13 @@ func (d *boltDriverPool) OpenPool() (Conn, error) {
 	return conn, nil
 }
 
-func (d *boltDriverPool) reclaim(conn *boltConn) {
+func (d *boltDriverPool) reclaim(cn *conn) {
 	// sneakily swap out connection so a reference to
 	// it isn't held on to
-	newConn := &boltConn{}
-	*newConn = *conn
+	newConn := &conn{}
+	*newConn = *cn
 	d.pool <- newConn
-	conn = nil
+	cn = nil
 }
 
 type values map[string]string
@@ -354,6 +386,6 @@ func (v values) merge(v2 values) {
 }
 
 func init() {
-	sql.Register("neo4j-bolt", &boltDriver{})
+	sql.Register("neo4j-bolt", &drv{})
 	sql.Register("neo4j-bolt-recorder", &recorder{})
 }
