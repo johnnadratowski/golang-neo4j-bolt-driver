@@ -1,4 +1,4 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"database/sql/driver"

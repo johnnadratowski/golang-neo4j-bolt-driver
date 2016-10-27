@@ -1,4 +1,4 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"database/sql/driver"
@@ -7,20 +7,6 @@ import (
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
-
-// Stmt represents a statement to run against the database
-//
-// Stmt objects, and any rows prepared within ARE NOT
-// THREAD SAFE. If you want to use multiple go routines with these objects,
-// you should use a driver to create a new conn for each routine.
-type Stmt interface {
-	// Close Closes the statement. See sql/driver.Stmt.
-	Close() error
-	// ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
-	ExecNeo(params map[string]interface{}) (Result, error)
-	// QueryNeo executes a query that returns data. Implements a Neo-friendly alternative to sql/driver.
-	QueryNeo(params map[string]interface{}) (Rows, error)
-}
 
 // PipelineStmt represents a set of statements to run against the database
 //
@@ -45,12 +31,12 @@ type boltStmt struct {
 	rows    *boltRows
 }
 
-func newStmt(query string, con *conn) *boltStmt {
-	return &boltStmt{query: query, conn: con}
+func newStmt(query string, conn *conn) *boltStmt {
+	return &boltStmt{query: query, conn: conn}
 }
 
-func newPipelineStmt(queries []string, con *conn) *boltStmt {
-	return &boltStmt{queries: queries, conn: con}
+func newPipelineStmt(queries []string, conn *boltConn) *boltStmt {
+	return &boltStmt{queries: queries, conn: conn.conn}
 }
 
 // Close Closes the statement. See sql/driver.Stmt.
@@ -77,9 +63,17 @@ func (s *boltStmt) NumInput() int {
 	return -1 // TODO: would need a cypher parser for this. disable for now
 }
 
+func (s *boltStmt) Exec(args map[string]interface{}) (Result, error) {
+	return nil, nil
+}
+
+type sqlStmt struct {
+	*boltStmt
+}
+
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
 // You must bolt encode a map to pass as []bytes for the driver value
-func (s *boltStmt) Exec(args []driver.Value) (driver.Result, error) {
+func (s *sqlStmt) Exec(args []driver.Value) (driver.Result, error) {
 	params, err := driverArgsToMap(args)
 	if err != nil {
 		return nil, err
@@ -171,7 +165,7 @@ func (s *boltStmt) ExecPipeline(params ...map[string]interface{}) ([]Result, err
 
 // Query executes a query that returns data. See sql/driver.Stmt.
 // You must bolt encode a map to pass as []bytes for the driver value
-func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
+func (s *sqlStmt) Query(args []driver.Value) (driver.Rows, error) {
 	params, err := driverArgsToMap(args)
 	if err != nil {
 		return nil, err
@@ -180,7 +174,7 @@ func (s *boltStmt) Query(args []driver.Value) (driver.Rows, error) {
 }
 
 // QueryNeo executes a query that returns data. Implements a Neo-friendly alternative to sql/driver.
-func (s *boltStmt) QueryNeo(params map[string]interface{}) (Rows, error) {
+func (s *boltStmt) Query(params map[string]interface{}) (rows, error) {
 	return s.queryNeo(params)
 }
 

@@ -1,18 +1,10 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
-
-// Tx represents a transaction
-type Tx interface {
-	// Commit commits the transaction
-	Commit() error
-	// Rollback rolls back the transaction
-	Rollback() error
-}
 
 type boltTx struct {
 	conn   *conn

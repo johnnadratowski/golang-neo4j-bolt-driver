@@ -1,4 +1,4 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"database/sql/driver"
@@ -16,20 +16,17 @@ import (
 // Row objects ARE NOT THREAD SAFE.
 // If you want to use multiple go routines with these objects,
 // you should use a driver to create a new conn for each routine.
-type Rows interface {
+type rows interface {
 	// Columns Gets the names of the columns in the returned dataset
 	Columns() []string
 	// Metadata Gets all of the metadata returned from Neo on query start
 	Metadata() map[string]interface{}
 	// Close the rows, flushing any existing datastream
 	Close() error
-	// NextNeo gets the next row result
+	// Next gets the next row result
 	// When the rows are completed, returns the success metadata
 	// and io.EOF
-	NextNeo() ([]interface{}, map[string]interface{}, error)
-	// All gets all of the results from the row set. It's recommended to use NextNeo when
-	// there are a lot of rows
-	All() ([][]interface{}, map[string]interface{}, error)
+	Next([]driver.Value) error
 }
 
 // PipelineRows represents results of a set of rows from the DB
@@ -190,9 +187,7 @@ func (r *boltRows) Next(dest []driver.Value) error {
 			}
 		}
 	}
-
 	return nil
-
 }
 
 // NextNeo gets the next row result

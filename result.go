@@ -1,19 +1,6 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import "github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
-
-// Result represents a result from a query that returns no data
-type Result interface {
-	// LastInsertId Always returns -1. This is necessary
-	// to meet the sql.driver interface
-	LastInsertId() (int64, error)
-	// RowsAffected returns the number of rows affected
-	// This doesn't currently support updates, only
-	// inserts/deletions
-	RowsAffected() (int64, error)
-	// Metadata returns the metadata response from neo4j
-	Metadata() map[string]interface{}
-}
 
 type boltResult struct {
 	metadata map[string]interface{}

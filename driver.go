@@ -1,4 +1,4 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"crypto/tls"
@@ -35,22 +35,6 @@ const (
 	ClientID = "GolangNeo4jBolt/" + Version
 )
 
-type pool struct {
-	drv *drv
-}
-
-func (p *pool) Prepare(query string) (stmt Stmt, err error) {
-	for i := 0; i < 2; i++ {
-		stmt, err = p.prepare(query)
-	}
-}
-
-// OpenPool opens a connection pool similar to sql.Open. Non-Neo specific
-// pooling should be done the traditional way, through sql.Open.
-func OpenPool(name string) (Conn, error) {
-	return &pool{drv: drv}
-}
-
 // Open calls DialOpen with the default dialer.
 func Open(name string) (driver.Conn, error) {
 	env := os.Getenv(TLSEnv)
@@ -75,6 +59,82 @@ func OpenNeo(name string) (Conn, error) {
 		return DialOpenNeo(drv, name)
 	}
 	return DialOpenNeo(&dialer{}, name)
+}
+
+// DialOpen opens a driver.Conn with the given Dialer and network configuration.
+func DialOpen(d Dialer, name string) (driver.Conn, error) {
+	nc, v, err := open(d, name)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := newConn(nc, v)
+	if err != nil {
+		return nil, err
+	}
+	return &sqlConn{conn}, nil
+}
+
+// DialOpenNeo opens an Conn with the given Dialer and network configuration.
+func DialOpenNeo(d Dialer, name string) (Conn, error) {
+	nc, v, err := open(d, name)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := newConn(nc, v)
+	if err != nil {
+		return nil, err
+	}
+	return &boltConn{conn}, nil
+}
+
+// parseTimeout returns the timeout in seconds.
+func parseTimeout(tos string) (time.Duration, error) {
+	if tos == "" || tos == "0" {
+		return 0, nil
+	}
+	timeout, err := strconv.ParseInt(tos, 0, 0)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(timeout) * time.Second, nil
+}
+
+func open(d Dialer, name string) (net.Conn, values, error) {
+	// Default Neo4j configuration information.
+	v := values{"host": "localhost", "port": "7474"}
+
+	// Parse environment variables if applicable. These will be overwritten by
+	// the URI configuration if it exists.
+	v.merge(parseEnv())
+
+	// Parse our values from the URL if applicable.
+	if strings.HasPrefix(name, "bolt://") {
+		err := parseURL(v, name)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	conn, err := dial(d, v)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, v, nil
+}
+
+func dial(d Dialer, v values) (net.Conn, error) {
+	addr := net.JoinHostPort(v.get("host"), v.get("port"))
+	timeout, err := parseTimeout(v.get("dial_timeout"))
+	if err != nil {
+		return nil, err
+	}
+	if timeout != 0 {
+		return d.DialTimeout("tcp", addr, timeout)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return d.Dial("tcp", addr)
 }
 
 const (
@@ -161,6 +221,16 @@ func parseURL(v values, name string) error {
 	return nil
 }
 
+// Dialer is a generic interface for types that can dial network addresses.
+type Dialer interface {
+	// Dial connects to the address on the named network.
+	Dial(network, address string) (net.Conn, error)
+
+	// DialTimeout acts like Dial but takes a timeout. The timeout should
+	// included name resolution, if required.
+	DialTimeout(network, address string, timeout time.Duration) (net.Conn, error)
+}
+
 // TLSDialer returns a Dialer that is compatible with Neo4j. It can be passed
 // to DialOpen and DialOpenNeo. It reads configuration information from
 // environment variables, although the function parameters take precedence.
@@ -208,84 +278,6 @@ func TLSDialer(caFile, certFile, keyFile string, noVerify bool) (Dialer, error) 
 	return &dialer{cfg: cfg}, nil
 }
 
-// DialOpen opens a driver.Conn with the given Dialer and network configuration.
-func DialOpen(d Dialer, name string) (driver.Conn, error) {
-	conn, v, err := open(d, name)
-	if err != nil {
-		return nil, err
-	}
-	return newConn(conn, v)
-}
-
-// parseTimeout returns the timeout in seconds.
-func parseTimeout(tos string) (time.Duration, error) {
-	if tos == "" || tos == "0" {
-		return 0, nil
-	}
-	timeout, err := strconv.ParseInt(tos, 0, 0)
-	if err != nil {
-		return 0, err
-	}
-	return time.Duration(timeout) * time.Second, nil
-}
-
-func open(d Dialer, name string) (net.Conn, values, error) {
-	// Default Neo4j configuration information.
-	v := values{"host": "localhost", "port": "7474"}
-
-	// Parse environment variables if applicable. These will be overwritten by
-	// the URI configuration if it exists.
-	v.merge(parseEnv())
-
-	// Parse our values from the URL if applicable.
-	if strings.HasPrefix(name, "bolt://") {
-		err := parseURL(v, name)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	conn, err := dial(d, v)
-	if err != nil {
-		return nil, nil, err
-	}
-	return conn, v, nil
-}
-
-func dial(d Dialer, v values) (net.Conn, error) {
-	addr := net.JoinHostPort(v.get("host"), v.get("port"))
-	timeout, err := parseTimeout(v.get("dial_timeout"))
-	if err != nil {
-		return nil, err
-	}
-	if timeout != 0 {
-		return d.DialTimeout("tcp", addr, timeout)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return d.Dial("tcp", addr)
-}
-
-// DialOpenNeo opens an Conn with the given Dialer and network configuration.
-func DialOpenNeo(d Dialer, name string) (Conn, error) {
-	conn, v, err := open(d, name)
-	if err != nil {
-		return nil, err
-	}
-	return newConn(conn, v)
-}
-
-// Dialer is a generic interface for types that can dial network addresses.
-type Dialer interface {
-	// Dial connects to the address on the named network.
-	Dial(network, address string) (net.Conn, error)
-
-	// DialTimeout acts like Dial but takes a timeout. The timeout should
-	// included name resolution, if required.
-	DialTimeout(network, address string, timeout time.Duration) (net.Conn, error)
-}
-
 // dialer is the default Dialer. It'll use TLS if its cfg member is set,
 // typically through calling TLSDialer.
 type dialer struct {
@@ -315,52 +307,9 @@ func (d *drv) Open(name string) (driver.Conn, error) {
 	return Open(name)
 }
 
-// DriverPool is a driver allowing connection to Neo4j with support for
-// connection pooling. The driver allows you to open a new connection to Neo4j.
-//
-// Driver objects should be THREAD SAFE, so you can use them
-// to open connections in multiple threads. The connection objects
-// themselves, and any prepared statements/transactions within ARE NOT
-// THREAD SAFE.
-type DriverPool interface {
-	// OpenPool opens a Neo-specific connection.
-	OpenPool() (Conn, error)
-
-	reclaim(*conn)
-}
-
-type boltDriverPool struct {
-	connStr  string
-	maxConns int
-	pool     chan *conn
-}
-
-// NewDriverPool creates a new Driver object with connection pooling
-func NewDriverPool(connStr string, max int) (DriverPool, error) {
-	d := &boltDriverPool{
-		connStr:  connStr,
-		maxConns: max,
-		pool:     make(chan *conn, max),
-	}
-	for i := 0; i < max; i++ {
-		d.pool <- &conn{pool: d, size: DefaultChunkSize}
-	}
-	return d, nil
-}
-
-// OpenNeo opens a new Bolt connection to the Neo4J database.
-func (d *boltDriverPool) OpenPool() (Conn, error) {
-	conn := <-d.pool
-	return conn, nil
-}
-
-func (d *boltDriverPool) reclaim(cn *conn) {
-	// sneakily swap out connection so a reference to
-	// it isn't held on to
-	newConn := &conn{}
-	*newConn = *cn
-	d.pool <- newConn
-	cn = nil
+// OpenNeo opens a new Bolt connection to the Neo4J database
+func (d *drv) OpenNeo(name string) (Conn, error) {
+	return OpenNeo(name)
 }
 
 type values map[string]string
@@ -385,7 +334,12 @@ func (v values) merge(v2 values) {
 	}
 }
 
+const (
+	boltName     = "bolt"
+	recorderName = "bolt-recorder"
+)
+
 func init() {
-	sql.Register("neo4j-bolt", &drv{})
-	sql.Register("neo4j-bolt-recorder", &recorder{})
+	sql.Register(boltName, &drv{})
+	sql.Register(recorderName, &recorder{})
 }

@@ -1,4 +1,4 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"bytes"
@@ -22,13 +22,14 @@ type recorder struct {
 	cur    int
 }
 
-// NewRecorder initializes a Driver that records the session. Name will be the
-// name of the gzipped JSON file containing the recorded session.
-func NewRecorder(name string) interface {
-	driver.Driver
-	OpenNeo(string) (Conn, error)
-} {
-	return &recorder{name: name}
+// OpenRecorder opens a *DB that records the session. Name will be the name of
+// the gzipped JSON file containing the recorded session.
+func OpenRecorder(name, dataSourceName string) (*DB, error) {
+	db, err := openPool(&recorder{name: name}, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 const defaultTimeout = 5
@@ -37,14 +38,22 @@ const defaultTimeout = 5
 // an empty string. Otherwise, it opens up an actual connection using that to
 // create a new recording.
 func (r *recorder) Open(name string) (driver.Conn, error) {
-	return r.open(name)
+	conn, err := r.open(name)
+	if err != nil {
+		return nil, err
+	}
+	return &sqlConn{conn}, nil
 }
 
 // Open opens a simulated Neo4j connection using pre-recorded data if name is
 // an empty string. Otherwise, it opens up an actual connection using that to
 // create a new recording.
 func (r *recorder) OpenNeo(name string) (Conn, error) {
-	return r.open(name)
+	conn, err := r.open(name)
+	if err != nil {
+		return nil, err
+	}
+	return &boltConn{conn}, nil
 }
 
 func (r *recorder) open(name string) (*conn, error) {

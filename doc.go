@@ -1,4 +1,4 @@
-/*Package golangNeo4jBoltDriver implements a driver for the Neo4J Bolt Protocol.
+/*Package bolt implements a driver for the Neo4J Bolt Protocol.
 
 The driver is compatible with Golang's sql.driver interface, but
 aims to implement a more complete featureset in line with what
@@ -59,4 +59,4 @@ The supported query params are:
 * tls_cert_file - path to a cert file for this client (need to verify this is processed by Neo4j)
 * tls_key_file - path to a key file for this client (need to verify this is processed by Neo4j)
 */
-package golangNeo4jBoltDriver
+package bolt

@@ -1,10 +1,17 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
-	"io"
 	"reflect"
 	"testing"
 )
+
+func newRecorder(t *testing.T, name, dsn string) *DB {
+	db, err := OpenRecorder(name, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
 
 func TestBoltConn_parseURL(t *testing.T) {
 	v := make(values)
@@ -57,33 +64,19 @@ func TestBoltConn_parseURL(t *testing.T) {
 
 func TestBoltConn_Close(t *testing.T) {
 	// Records session for testing
-	rec := NewRecorder("TestBoltConn_Close")
+	rec := newRecorder(t, "TestBoltConn_Close", neo4jConnStr)
 
-	cn, err := rec.OpenNeo(neo4jConnStr)
-	if err != nil {
-		t.Fatalf("An error occurred opening conn: %s", err)
-	}
-
-	err = cn.Close()
+	err := rec.Close()
 	if err != nil {
 		t.Fatalf("An error occurred closing conn: %s", err)
-	}
-
-	if !cn.(*conn).closed {
-		t.Error("Conn not closed at end of test")
 	}
 }
 
 func TestBoltConn_SelectOne(t *testing.T) {
 	// Records session for testing
-	rec := NewRecorder("TestBoltConn_SelectOne")
+	rec := newRecorder(t, "TestBoltConn_SelectOne", neo4jConnStr)
 
-	conn, err := rec.OpenNeo(neo4jConnStr)
-	if err != nil {
-		t.Fatalf("An error occurred opening conn: %s", err)
-	}
-
-	rows, err := conn.QueryNeo("RETURN 1;", nil)
+	rows, err := rec.Query("RETURN 1;", nil)
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
@@ -95,24 +88,27 @@ func TestBoltConn_SelectOne(t *testing.T) {
 		t.Fatalf("Unexpected success metadata. Expected %#v. Got: %#v", expectedMetadata, rows.Metadata())
 	}
 
-	output, _, err := rows.NextNeo()
+	var out int64
+	for rows.Next() {
+		rows.Scan(&out)
+	}
+
+	err = rows.Err()
 	if err != nil {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	if output[0].(int64) != 1 {
-		t.Fatalf("Unexpected output. Expected 1. Got: %d", output)
+	if out != 1 {
+		t.Fatalf("Unexpected output. Expected 1. Got: %d", out)
 	}
 
-	_, metadata, err := rows.NextNeo()
 	expectedMetadata = map[string]interface{}{"type": "r"}
-	if err != io.EOF {
-		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
-	} else if !reflect.DeepEqual(metadata, expectedMetadata) {
+	metadata := rows.Metadata()
+	if !reflect.DeepEqual(metadata, expectedMetadata) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
-	err = conn.Close()
+	err = rec.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
 	}
@@ -120,14 +116,9 @@ func TestBoltConn_SelectOne(t *testing.T) {
 
 func TestBoltConn_SelectAll(t *testing.T) {
 	// Records session for testing
-	rec := NewRecorder("TestBoltConn_SelectAll")
+	rec := newRecorder(t, "TestBoltConn_SelectAll", neo4jConnStr)
 
-	conn, err := rec.OpenNeo(neo4jConnStr)
-	if err != nil {
-		t.Fatalf("An error occurred opening conn: %s", err)
-	}
-
-	results, err := conn.ExecNeo("CREATE (f:NODE {a: 1}), (b:NODE {a: 2})", nil)
+	results, err := rec.Exec("CREATE (f:NODE {a: 1}), (b:NODE {a: 2})", nil)
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
@@ -139,23 +130,36 @@ func TestBoltConn_SelectAll(t *testing.T) {
 		t.Fatalf("Incorrect number of rows affected: %d", affected)
 	}
 
-	data, rowMetadata, metadata, err := conn.QueryNeoAll("MATCH (n:NODE) RETURN n.a ORDER BY n.a", nil)
-	if data[0][0] != int64(1) {
-		t.Fatalf("Incorrect data returned for first row: %#v", data[0])
+	rows, err := rec.Query("MATCH (n:NODE) RETURN n.a ORDER BY n.a", nil)
+	metadata := rows.Metadata()
+
+	var out [2]int64
+	for i := 0; i < len(out) && rows.Next(); i++ {
+		rows.Scan(&out[i])
 	}
-	if data[1][0] != int64(2) {
-		t.Fatalf("Incorrect data returned for second row: %#v", data[1])
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
 	}
 
-	if rowMetadata["fields"].([]interface{})[0] != "n.a" {
-		t.Fatalf("Unexpected column metadata: %#v", rowMetadata)
+	if out[0] != int64(1) {
+		t.Fatalf("Incorrect data returned for first row: %#v", out[0])
+	}
+	if out[1] != int64(2) {
+		t.Fatalf("Incorrect data returned for second row: %#v", out[1])
+	}
+
+	if metadata["fields"].([]interface{})[0] != "n.a" {
+		t.Fatalf("Unexpected column metadata: %#v", metadata)
 	}
 
 	if metadata["type"].(string) != "r" {
 		t.Fatalf("Unexpected request metadata: %#v", metadata)
 	}
 
-	results, err = conn.ExecNeo("MATCH (n:NODE) DELETE n", nil)
+	results, err = rec.Exec("MATCH (n:NODE) DELETE n", nil)
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
@@ -167,7 +171,7 @@ func TestBoltConn_SelectAll(t *testing.T) {
 		t.Fatalf("Incorrect number of rows affected: %d", affected)
 	}
 
-	err = conn.Close()
+	err = rec.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
 	}
@@ -175,51 +179,58 @@ func TestBoltConn_SelectAll(t *testing.T) {
 
 func TestBoltConn_Ignored(t *testing.T) {
 	// Records session for testing
-	rec := NewRecorder("TestBoltConn_Ignored")
+	rec := newRecorder(t, "TestBoltConn_Ignored", neo4jConnStr)
 
-	conn, err := rec.OpenNeo(neo4jConnStr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
+	defer rec.Close()
 
 	// This will make two calls at once - Run and Pull All.  The pull all should be ignored, which is what
 	// we're testing.
-	_, err = conn.ExecNeo("syntax error", map[string]interface{}{"foo": 1, "bar": 2.2})
+	_, err := rec.Query("syntax error", map[string]interface{}{"foo": 1, "bar": 2.2})
 	if err == nil {
 		t.Fatal("Expected an error on syntax error.")
 	}
 
-	data, _, _, err := conn.QueryNeoAll("RETURN 1;", nil)
+	rows, err := rec.Query("RETURN 1;", nil)
 	if err != nil {
 		t.Fatalf("Got error when running next query after a failure: %#v", err)
 	}
+	defer rows.Close()
 
-	if data[0][0].(int64) != 1 {
-		t.Fatalf("Expected different data from output: %#v", data)
+	var out int64
+	for rows.Next() {
+		rows.Scan(&out)
+	}
+
+	if out != 1 {
+		t.Fatalf("Expected different data from output: %#v", out)
 	}
 }
 
 func TestBoltConn_IgnoredPipeline(t *testing.T) {
 	// Records session for testing
-	rec := NewRecorder("TestBoltConn_IgnoredPipeline")
+	rec := newRecorder(t, "TestBoltConn_IgnoredPipeline", neo4jConnStr)
 
-	conn, _ := rec.OpenNeo(neo4jConnStr)
-	defer conn.Close()
+	defer rec.Close()
 
 	// This will make two calls at once - Run and Pull All.  The pull all should be ignored, which is what
 	// we're testing.
-	_, err := conn.ExecPipeline([]string{"syntax error", "syntax error", "syntax error"}, nil)
+	_, err := rec.ExecPipeline([]string{"syntax error", "syntax error", "syntax error"})
 	if err == nil {
 		t.Fatal("Expected an error on syntax error.")
 	}
 
-	data, _, _, err := conn.QueryNeoAll("RETURN 1;", nil)
+	rows, err := rec.Query("RETURN 1;", nil)
 	if err != nil {
 		t.Fatalf("Got error when running next query after a failure: %#v", err)
 	}
+	defer rows.Close()
 
-	if data[0][0].(int64) != 1 {
-		t.Fatalf("Expected different data from output: %#v", data)
+	var out int64
+	for rows.Next() {
+		rows.Scan(&out)
+	}
+
+	if out != 1 {
+		t.Fatalf("Expected different data from output: %#v", out)
 	}
 }

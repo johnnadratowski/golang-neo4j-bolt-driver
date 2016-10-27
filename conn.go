@@ -1,4 +1,4 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
 	"database/sql/driver"
@@ -23,25 +23,25 @@ const DefaultChunkSize = math.MaxUint16
 // thread safe. If you want to use multipe go routines with these objects you
 // should use a driver to create a new conn for each routine.
 type Conn interface {
-	// PrepareNeo prepares a neo4j specific statement.
-	PrepareNeo(query string) (Stmt, error)
+	// Prepare prepares a neo4j specific statement.
+	Prepare(query string) (stmt, error)
 
 	// PreparePipeline prepares a neo4j specific pipeline statement
 	// Useful for running multiple queries at the same time.
 	PreparePipeline(query ...string) (PipelineStmt, error)
 
-	// QueryNeo queries using the Neo4j-specific interface.
-	QueryNeo(query string, params map[string]interface{}) (Rows, error)
+	// Query queries using the Neo4j-specific interface.
+	Query(query string, params map[string]interface{}) (rows, error)
 
-	// QueryNeoAll queries using the Neo4j-specific interface and returns all row data and output metadata.
-	QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error)
+	// QueryAll queries using the Neo4j-specific interface and returns all row data and output metadata.
+	QueryAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error)
 
 	// QueryPipeline queries using the Neo4j-specific interface
 	// pipelining multiple statements.
 	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
 
-	// ExecNeo executes a query using the Neo4j-specific interface.
-	ExecNeo(query string, params map[string]interface{}) (Result, error)
+	// Exec executes a query using the Neo4j-specific interface.
+	Exec(query string, params map[string]interface{}) (Result, error)
 
 	// ExecPipeline executes a query using the Neo4j-specific interface
 	// pipelining multiple statements.
@@ -79,6 +79,14 @@ type conn struct {
 
 	transaction *boltTx
 	statement   *boltStmt
+}
+
+type boltConn struct {
+	*conn
+}
+
+type sqlConn struct {
+	*conn
 }
 
 func newConn(netcn net.Conn, v values) (*conn, error) {
@@ -172,12 +180,6 @@ func (c *conn) Close() error {
 		}
 	}
 
-	if c.pool != nil {
-		// If using connection pooling, don't close connection, just reclaim it
-		c.pool.reclaim(c)
-		return nil
-	}
-
 	err := c.conn.Close()
 	c.closed = err == nil
 	return err
@@ -257,18 +259,19 @@ func (c *conn) reset() error {
 	}
 }
 
-// Prepare prepares a new statement for a query
-func (c *conn) Prepare(query string) (driver.Stmt, error) {
-	return c.prepare(query)
+// Prepare
+func (c *sqlConn) Prepare(query string) (driver.Stmt, error) {
+	return nil, nil
+	//return c.prepare(query)
 }
 
 // Prepare prepares a new statement for a query. Implements a Neo-friendly alternative to sql/driver.
-func (c *conn) PrepareNeo(query string) (Stmt, error) {
+func (c *conn) Prepare(query string) (stmt, error) {
 	return c.prepare(query)
 }
 
 // PreparePipeline prepares a new pipeline statement for a query.
-func (c *conn) PreparePipeline(queries ...string) (PipelineStmt, error) {
+func (c *boltConn) PreparePipeline(queries ...string) (PipelineStmt, error) {
 	if c.statement != nil {
 		return nil, ErrOpen
 	}
@@ -507,20 +510,21 @@ func (c *conn) sendRunDiscardAllConsume(query string, args map[string]interface{
 	return runResp, discardResp, err
 }
 
-func (c *conn) Query(query string, args []driver.Value) (driver.Rows, error) {
+func (c *sqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
 	params, err := driverArgsToMap(args)
 	if err != nil {
 		return nil, err
 	}
-	return c.queryNeo(query, params)
+	return nil, nil
+	//return c.conn.query(query, params)
 }
 
-func (c *conn) QueryNeo(query string, params map[string]interface{}) (Rows, error) {
-	return c.queryNeo(query, params)
+func (c *boltConn) Query(query string, params map[string]interface{}) (rows, error) {
+	return c.conn.query(query, params)
 }
 
-func (c *conn) QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
-	rows, err := c.queryNeo(query, params)
+func (c *boltConn) QueryAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
+	rows, err := c.conn.query(query, params)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -533,7 +537,7 @@ func (c *conn) QueryNeoAll(query string, params map[string]interface{}) ([][]int
 var ErrClosed = fmt.Errorf("connection already closed")
 var ErrOpen = fmt.Errorf("open connection already exists")
 
-func (c *conn) queryNeo(query string, params map[string]interface{}) (*boltRows, error) {
+func (c *conn) query(query string, params map[string]interface{}) (*boltRows, error) {
 	if c.statement != nil {
 		return nil, ErrOpen
 	}
@@ -557,7 +561,7 @@ func (c *conn) queryNeo(query string, params map[string]interface{}) (*boltRows,
 	return c.statement.rows, nil
 }
 
-func (c *conn) QueryPipeline(queries []string, params ...map[string]interface{}) (PipelineRows, error) {
+func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interface{}) (PipelineRows, error) {
 	if c.statement != nil {
 		return nil, ErrOpen
 	}
@@ -579,7 +583,7 @@ func (c *conn) QueryPipeline(queries []string, params ...map[string]interface{})
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
 // You must bolt encode a map to pass as []bytes for the driver value
-func (c *conn) Exec(query string, args []driver.Value) (driver.Result, error) {
+func (c *sqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	if c.statement != nil {
 		return nil, ErrOpen
 	}
@@ -587,14 +591,14 @@ func (c *conn) Exec(query string, args []driver.Value) (driver.Result, error) {
 		return nil, ErrClosed
 	}
 
-	stmt := newStmt(query, c)
+	stmt := newStmt(query, c.conn)
 	defer stmt.Close()
 
-	return stmt.Exec(args)
+	return (&sqlStmt{stmt}).Exec(args)
 }
 
-// ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
-func (c *conn) ExecNeo(query string, params map[string]interface{}) (Result, error) {
+// Exec executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
+func (c *boltConn) Exec(query string, params map[string]interface{}) (Result, error) {
 	if c.statement != nil {
 		return nil, ErrOpen
 	}
@@ -602,13 +606,13 @@ func (c *conn) ExecNeo(query string, params map[string]interface{}) (Result, err
 		return nil, ErrClosed
 	}
 
-	stmt := newStmt(query, c)
+	stmt := newStmt(query, c.conn)
 	defer stmt.Close()
 
 	return stmt.ExecNeo(params)
 }
 
-func (c *conn) ExecPipeline(queries []string, params ...map[string]interface{}) ([]Result, error) {
+func (c *boltConn) ExecPipeline(queries []string, params ...map[string]interface{}) ([]Result, error) {
 	if c.statement != nil {
 		return nil, ErrOpen
 	}
