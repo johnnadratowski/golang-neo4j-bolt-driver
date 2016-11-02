@@ -26,26 +26,11 @@ type Conn interface {
 	// Prepare prepares a neo4j specific statement.
 	Prepare(query string) (stmt, error)
 
-	// PreparePipeline prepares a neo4j specific pipeline statement
-	// Useful for running multiple queries at the same time.
-	PreparePipeline(query ...string) (PipelineStmt, error)
-
 	// Query queries using the Neo4j-specific interface.
 	Query(query string, params map[string]interface{}) (rows, error)
 
-	// QueryAll queries using the Neo4j-specific interface and returns all row data and output metadata.
-	QueryAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error)
-
-	// QueryPipeline queries using the Neo4j-specific interface
-	// pipelining multiple statements.
-	QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error)
-
 	// Exec executes a query using the Neo4j-specific interface.
 	Exec(query string, params map[string]interface{}) (Result, error)
-
-	// ExecPipeline executes a query using the Neo4j-specific interface
-	// pipelining multiple statements.
-	ExecPipeline(query []string, params ...map[string]interface{}) ([]Result, error)
 
 	// Close closes the connection.
 	Close() error
@@ -72,20 +57,33 @@ const (
 
 type conn struct {
 	conn    net.Conn
+	dec     *encoding.Decoder
+	enc     *encoding.Encoder
 	timeout time.Duration
 	size    uint16
 	status  status
-	closed  bool
+	bad     bool
+}
 
-	transaction *boltTx
-	statement   *boltStmt
+func (c *conn) decode() (interface{}, error) {
+	if c.dec == nil {
+		c.dec = encoding.NewDecoder(c)
+	}
+	if !c.dec.More() {
+		return nil, io.EOF
+	}
+	return c.dec.Decode()
+}
+
+func (c *conn) encode(v interface{}) error {
+	if c.enc == nil {
+		c.enc = encoding.NewEncoder(c)
+		c.enc.SetChunkSize(c.size)
+	}
+	return c.enc.Encode(v)
 }
 
 type boltConn struct {
-	*conn
-}
-
-type sqlConn struct {
 	*conn
 }
 
@@ -158,42 +156,23 @@ func (c *conn) Write(b []byte) (n int, err error) {
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
 func (c *conn) Close() error {
-	if c.closed {
-		return nil
+	if c.bad {
+		return driver.ErrBadConn
 	}
-
-	if c.transaction != nil {
-		if err := c.transaction.Rollback(); err != nil {
-			return err
-		}
-	}
-
-	if c.statement != nil {
-		if err := c.statement.Close(); err != nil {
-			return err
-		}
-	}
-
-	if c.transaction != nil {
-		if err := c.transaction.Rollback(); err != nil {
-			return fmt.Errorf("Error rolling back transaction when closing connection")
-		}
-	}
-
 	err := c.conn.Close()
-	c.closed = err == nil
+	c.bad = err == nil
 	return err
 }
 
 func (c *conn) ackFailure(failure messages.FailureMessage) error {
 	ack := messages.NewAckFailureMessage()
-	err := encoding.NewEncoder(c, c.size).Encode(ack)
+	err := c.encode(ack)
 	if err != nil {
 		return fmt.Errorf("An error occurred encoding ack failure message")
 	}
 
 	for {
-		resp, err := encoding.NewDecoder(c).Decode()
+		resp, err := c.decode()
 		if err != nil {
 			return fmt.Errorf("An error occurred decoding ack failure message response")
 		}
@@ -223,13 +202,13 @@ func (c *conn) reset() error {
 	log.Info("Resetting session")
 
 	reset := messages.NewResetMessage()
-	err := encoding.NewEncoder(c, c.size).Encode(reset)
+	err := c.encode(reset)
 	if err != nil {
 		return fmt.Errorf("An error occurred encoding reset message")
 	}
 
 	for {
-		resp, err := encoding.NewDecoder(c).Decode()
+		resp, err := c.decode()
 		if err != nil {
 			return fmt.Errorf("An error occurred decoding reset message response")
 		}
@@ -259,49 +238,21 @@ func (c *conn) reset() error {
 	}
 }
 
-// Prepare
-func (c *sqlConn) Prepare(query string) (driver.Stmt, error) {
-	return nil, nil
-	//return c.prepare(query)
-}
-
 // Prepare prepares a new statement for a query. Implements a Neo-friendly alternative to sql/driver.
 func (c *conn) Prepare(query string) (stmt, error) {
 	return c.prepare(query)
 }
 
-// PreparePipeline prepares a new pipeline statement for a query.
-func (c *boltConn) PreparePipeline(queries ...string) (PipelineStmt, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
-	}
-	if c.closed {
-		return nil, ErrClosed
-	}
-	c.statement = newPipelineStmt(queries, c)
-	return c.statement, nil
-}
-
 func (c *conn) prepare(query string) (*boltStmt, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
-	}
-	if c.closed {
+	if c.bad {
 		return nil, ErrClosed
 	}
-	c.statement = newStmt(query, c)
-	return c.statement, nil
+	return &boltStmt{conn: c, query: query}, nil
 }
 
 // Begin begins a new transaction with the Neo4J Database
 func (c *conn) Begin() (driver.Tx, error) {
-	if c.transaction != nil {
-		return nil, fmt.Errorf("An open transaction already exists")
-	}
-	if c.statement != nil {
-		return nil, fmt.Errorf("Cannot open a transaction when you already have an open statement")
-	}
-	if c.closed {
+	if c.bad {
 		return nil, ErrClosed
 	}
 
@@ -338,7 +289,7 @@ func (c *conn) SetTimeout(timeout time.Duration) {
 }
 
 func (c *conn) consume() (interface{}, error) {
-	resp, err := encoding.NewDecoder(c).Decode()
+	resp, err := c.decode()
 	if err != nil {
 		return resp, err
 	}
@@ -347,26 +298,22 @@ func (c *conn) consume() (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		return failure, err
+		return failure, nil
 	}
 	return resp, err
 }
 
 func (c *conn) consumeAll() ([]interface{}, interface{}, error) {
-	log.Info("Consuming all responses until success/failure")
-
 	var responses []interface{}
 	for {
 		resp, err := c.consume()
 		if err != nil {
 			return nil, resp, err
 		}
-
-		if success, isSuccess := resp.(messages.SuccessMessage); isSuccess {
-			log.Infof("Got success message: %#v", success)
-			return responses, success, nil
+		smg, ok := resp.(messages.SuccessMessage)
+		if ok {
+			return responses, smg, nil
 		}
-
 		responses = append(responses, resp)
 	}
 }
@@ -392,55 +339,43 @@ func (c *conn) consumeAllMultiple(mult int) ([][]interface{}, []interface{}, err
 
 func (c *conn) sendInit(user, pass string) (interface{}, error) {
 	initMessage := messages.NewInitMessage(ClientID, user, pass)
-	err := encoding.NewEncoder(c, c.size).Encode(initMessage)
+	err := c.encode(initMessage)
 	if err != nil {
 		return nil, err
 	}
 	return c.consume()
 }
 
-func (c *conn) sendRun(query string, args map[string]interface{}) error {
-	log.Infof("Sending RUN message: query %s (args: %#v)", query, args)
+func (c *conn) run(query string, args map[string]interface{}) error {
 	runMessage := messages.NewRunMessage(query, args)
-	if err := encoding.NewEncoder(c, c.size).Encode(runMessage); err != nil {
-		return fmt.Errorf("An error occurred running query")
-	}
-	return nil
+	return c.encode(runMessage)
 }
 
 func (c *conn) sendRunConsume(query string, args map[string]interface{}) (interface{}, error) {
-	if err := c.sendRun(query, args); err != nil {
+	if err := c.run(query, args); err != nil {
 		return nil, err
 	}
 	return c.consume()
 }
 
-func (c *conn) sendPullAll() error {
-	log.Infof("Sending PULL_ALL message")
-
+func (c *conn) pullAll() error {
 	pullAllMessage := messages.NewPullAllMessage()
-	err := encoding.NewEncoder(c, c.size).Encode(pullAllMessage)
-	if err != nil {
-		return fmt.Errorf("An error occurred encoding pull all query")
-	}
-
-	return nil
+	return c.encode(pullAllMessage)
 }
 
-func (c *conn) sendPullAllConsume() (interface{}, error) {
-	if err := c.sendPullAll(); err != nil {
+func (c *conn) pullAllConsume() (interface{}, error) {
+	if err := c.pullAll(); err != nil {
 		return nil, err
 	}
-
 	return c.consume()
 }
 
 func (c *conn) sendRunPullAll(query string, args map[string]interface{}) error {
-	err := c.sendRun(query, args)
+	err := c.run(query, args)
 	if err != nil {
 		return err
 	}
-	return c.sendPullAll()
+	return c.pullAll()
 }
 
 func (c *conn) sendRunPullAllConsumeRun(query string, args map[string]interface{}) (interface{}, error) {
@@ -483,7 +418,7 @@ func (c *conn) sendRunPullAllConsumeAll(query string, args map[string]interface{
 
 func (c *conn) sendDiscardAll() error {
 	msg := messages.NewDiscardAllMessage()
-	return encoding.NewEncoder(c, c.size).Encode(msg)
+	return c.encode(msg)
 }
 
 func (c *conn) sendDiscardAllConsume() (interface{}, error) {
@@ -494,7 +429,7 @@ func (c *conn) sendDiscardAllConsume() (interface{}, error) {
 }
 
 func (c *conn) sendRunDiscardAll(query string, args map[string]interface{}) error {
-	err := c.sendRun(query, args)
+	err := c.run(query, args)
 	if err != nil {
 		return err
 	}
@@ -510,118 +445,16 @@ func (c *conn) sendRunDiscardAllConsume(query string, args map[string]interface{
 	return runResp, discardResp, err
 }
 
-func (c *sqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
-	params, err := driverArgsToMap(args)
-	if err != nil {
-		return nil, err
-	}
-	return nil, nil
-	//return c.conn.query(query, params)
-}
-
-func (c *boltConn) Query(query string, params map[string]interface{}) (rows, error) {
-	return c.conn.query(query, params)
-}
-
-func (c *boltConn) QueryAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
-	rows, err := c.conn.query(query, params)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer rows.Close()
-
-	data, metadata, err := rows.All()
-	return data, rows.metadata, metadata, err
-}
-
 var ErrClosed = fmt.Errorf("connection already closed")
-var ErrOpen = fmt.Errorf("open connection already exists")
 
-func (c *conn) query(query string, params map[string]interface{}) (*boltRows, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
+func (c *conn) query(query string, args map[string]interface{}) (*boltRows, error) {
+	if c.bad {
+		return nil, driver.ErrBadConn
 	}
-	if c.closed {
-		return nil, ErrClosed
-	}
-
-	c.statement = newStmt(query, c)
-
-	// Pipeline the run + pull all for this
-	successResp, err := c.sendRunPullAllConsumeRun(c.statement.query, params)
+	stmt := &boltStmt{conn: c, query: query}
+	err := stmt.exec(args)
 	if err != nil {
 		return nil, err
 	}
-	success, ok := successResp.(messages.SuccessMessage)
-	if !ok {
-		return nil, fmt.Errorf("Unexpected response querying neo from connection: %#v", successResp)
-	}
-
-	c.statement.rows = newQueryRows(c.statement, success.Metadata)
-	return c.statement.rows, nil
-}
-
-func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interface{}) (PipelineRows, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
-	}
-	if c.closed {
-		return nil, ErrClosed
-	}
-
-	c.statement = newPipelineStmt(queries, c)
-	rows, err := c.statement.QueryPipeline(params...)
-	if err != nil {
-		return nil, err
-	}
-
-	// Since we're not exposing the statement,
-	// tell the rows to close it when they are closed
-	rows.(*boltRows).closeStatement = true
-	return rows, nil
-}
-
-// Exec executes a query that returns no rows. See sql/driver.Stmt.
-// You must bolt encode a map to pass as []bytes for the driver value
-func (c *sqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
-	}
-	if c.closed {
-		return nil, ErrClosed
-	}
-
-	stmt := newStmt(query, c.conn)
-	defer stmt.Close()
-
-	return (&sqlStmt{stmt}).Exec(args)
-}
-
-// Exec executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
-func (c *boltConn) Exec(query string, params map[string]interface{}) (Result, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
-	}
-	if c.closed {
-		return nil, ErrClosed
-	}
-
-	stmt := newStmt(query, c.conn)
-	defer stmt.Close()
-
-	return stmt.ExecNeo(params)
-}
-
-func (c *boltConn) ExecPipeline(queries []string, params ...map[string]interface{}) ([]Result, error) {
-	if c.statement != nil {
-		return nil, ErrOpen
-	}
-	if c.closed {
-		return nil, ErrClosed
-	}
-
-	stmt := newPipelineStmt(queries, c)
-	defer stmt.Close()
-
-	return stmt.ExecPipeline(params...)
+	return &boltRows{conn: c, md: stmt.md}, nil
 }

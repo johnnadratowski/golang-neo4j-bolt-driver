@@ -6,10 +6,6 @@ type boltResult struct {
 	metadata map[string]interface{}
 }
 
-func newResult(metadata map[string]interface{}) boltResult {
-	return boltResult{metadata: metadata}
-}
-
 // Returns the response metadata from the bolt success message
 func (r boltResult) Metadata() map[string]interface{} {
 	return r.metadata
@@ -21,14 +17,19 @@ func (r boltResult) LastInsertId() (int64, error) {
 	return -1, nil
 }
 
-// RowsAffected returns the number of nodes+rels created/deleted. For reasons of limitations
-// on the API, we cannot tell how many nodes+rels were updated, only how many properties were
-// updated. If this changes in the future, number updated will be added to the output of this
-// interface.
+// RowsAffected returns the number of nodes+rels created/deleted. For reasons
+// of limitations on the API, we cannot tell how many nodes+rels were updated,
+// only how many properties were updated. If this changes in the future, number
+// updated will be added to the output of this interface.
 func (r boltResult) RowsAffected() (int64, error) {
-	stats, ok := r.metadata["stats"].(map[string]interface{})
+	statsmd, ok := r.metadata["stats"]
 	if !ok {
-		return -1, errors.New("Unrecognized type for stats metadata: %#v", r.metadata)
+		return -1, errors.New("stats do not exist")
+	}
+
+	stats, ok := statsmd.(map[string]interface{})
+	if !ok {
+		return -1, errors.New("invalid type for metadata: %T", statsmd)
 	}
 
 	var rowsAffected int64
@@ -51,6 +52,5 @@ func (r boltResult) RowsAffected() (int64, error) {
 	if ok {
 		rowsAffected += relsDeleted.(int64)
 	}
-
 	return rowsAffected, nil
 }

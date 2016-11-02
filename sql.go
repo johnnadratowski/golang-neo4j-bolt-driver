@@ -24,33 +24,6 @@ import (
 	"time"
 )
 
-// nowFunc returns the current time; it's overridden in tests.
-var nowFunc = time.Now
-
-// Scanner is an interface used by Scan.
-type Scanner interface {
-	// Scan assigns a value from a database driver.
-	//
-	// The src value will be of one of the following types:
-	//
-	//    int64
-	//    float64
-	//    bool
-	//    []byte
-	//    string
-	//    time.Time
-	//    nil - for NULL values
-	//
-	// An error should be returned if the value cannot be stored
-	// without loss of information.
-	Scan(src interface{}) error
-}
-
-// ErrNoRows is returned by Scan when QueryRow doesn't return a
-// row. In such a case, QueryRow returns a placeholder *Row value that
-// defers this error until a Scan.
-var ErrNoRows = errors.New("sql: no rows in result set")
-
 // DB is a database handle representing a pool of zero or more
 // underlying connections. It's safe for concurrent use by multiple
 // goroutines.
@@ -116,7 +89,7 @@ type driverConn struct {
 	ci          *boltConn
 	closed      bool
 	finalClosed bool // ci.Close has been called
-	openStmt    map[io.Closer]bool
+	openStmt    map[stmt]bool
 
 	// guarded by db.mu
 	inUse      bool
@@ -128,7 +101,7 @@ func (dc *driverConn) releaseConn(err error) {
 	dc.db.putConn(dc, err)
 }
 
-func (dc *driverConn) removeOpenStmt(si io.Closer) {
+func (dc *driverConn) removeOpenStmt(si stmt) {
 	dc.Lock()
 	defer dc.Unlock()
 	delete(dc.openStmt, si)
@@ -139,17 +112,6 @@ func (dc *driverConn) expired(timeout time.Duration) bool {
 		return false
 	}
 	return dc.createdAt.Add(timeout).Before(time.Now())
-}
-
-func (dc *driverConn) prepareLockedPipeline(queries ...string) (PipelineStmt, error) {
-	psi, err := dc.ci.PreparePipeline(queries...)
-	if err == nil {
-		if dc.openStmt == nil {
-			dc.openStmt = make(map[io.Closer]bool)
-		}
-		dc.openStmt[psi] = true
-	}
-	return psi, nil
 }
 
 func (dc *driverConn) prepareLocked(query string) (stmt, error) {
@@ -169,7 +131,7 @@ func (dc *driverConn) prepareLocked(query string) (stmt, error) {
 		// stmt), using driverStmt as a pointer
 		// everywhere, and making it a finalCloser.
 		if dc.openStmt == nil {
-			dc.openStmt = make(map[io.Closer]bool)
+			dc.openStmt = make(map[stmt]bool)
 		}
 		dc.openStmt[si] = true
 	}
@@ -568,9 +530,7 @@ type DBStats struct {
 // Stats returns database statistics.
 func (db *DB) Stats() DBStats {
 	db.mu.Lock()
-	stats := DBStats{
-		OpenConnections: db.numOpen,
-	}
+	stats := DBStats{OpenConnections: db.numOpen}
 	db.mu.Unlock()
 	return stats
 }
@@ -624,11 +584,7 @@ func (db *DB) openNewConnection() {
 		db.maybeOpenNewConnections()
 		return
 	}
-	dc := &driverConn{
-		db:        db,
-		createdAt: time.Now(),
-		ci:        ci.(*boltConn),
-	}
+	dc := &driverConn{db: db, createdAt: time.Now(), ci: ci.(*boltConn)}
 	if db.putConnDBLocked(dc, err) {
 		db.addDepLocked(dc, dc)
 	} else {
@@ -701,11 +657,7 @@ func (db *DB) conn(strategy connReuseStrategy) (*driverConn, error) {
 		return nil, err
 	}
 	db.mu.Lock()
-	dc := &driverConn{
-		db:        db,
-		createdAt: time.Now(),
-		ci:        ci.(*boltConn),
-	}
+	dc := &driverConn{db: db, createdAt: time.Now(), ci: ci.(*boltConn)}
 	db.addDepLocked(dc, dc)
 	dc.inUse = true
 	db.mu.Unlock()
@@ -872,50 +824,6 @@ func (db *DB) prepare(query string, strategy connReuseStrategy) (*Stmt, error) {
 	return stmt, nil
 }
 
-func (db *DB) PreparePipeline(queries ...string) (PipelineStmt, error) {
-	var stmt PipelineStmt
-	var err error
-	for i := 0; i < maxBadConnRetries; i++ {
-		stmt, err = db.preparePipeline(queries, cachedOrNewConn)
-		if err != driver.ErrBadConn {
-			break
-		}
-	}
-	if err == driver.ErrBadConn {
-		return db.preparePipeline(queries, alwaysNewConn)
-	}
-	return stmt, err
-}
-
-func (db *DB) preparePipeline(queries []string, strategy connReuseStrategy) (PipelineStmt, error) {
-	// TODO: check if db.driver supports an optional
-	// driver.Preparer interface and call that instead, if so,
-	// otherwise we make a prepared statement that's bound
-	// to a connection, and to execute this prepared statement
-	// we either need to use this connection (if it's free), else
-	// get a new connection + re-prepare + execute on that one.
-	dc, err := db.conn(strategy)
-	if err != nil {
-		return nil, err
-	}
-	dc.Lock()
-	si, err := dc.prepareLockedPipeline(queries...)
-	dc.Unlock()
-	if err != nil {
-		db.putConn(dc, err)
-		return nil, err
-	}
-	stmt := &Stmt{
-		db:            db,
-		query:         queries,
-		css:           []connStmt{{dc, si}},
-		lastNumClosed: atomic.LoadUint64(&db.numClosed),
-	}
-	db.addDep(stmt, stmt)
-	db.putConn(dc, nil)
-	return stmt, nil
-}
-
 // Exec executes a query without returning any rows.
 // The args are for any placeholder parameters in the query.
 func (db *DB) Exec(query string, args map[string]interface{}) (Result, error) {
@@ -931,25 +839,6 @@ func (db *DB) Exec(query string, args map[string]interface{}) (Result, error) {
 		return db.exec(query, args, alwaysNewConn)
 	}
 	return res, err
-}
-
-func (db *DB) ExecPipeline(queries []string, args ...map[string]interface{}) ([]Result, error) {
-	var res []Result
-	var err error
-	for i := 0; i < maxBadConnRetries; i++ {
-		res, err = db.execPipeline(queries, args, cachedOrNewConn)
-		if err != driver.ErrBadConn {
-			break
-		}
-	}
-	if err == driver.ErrBadConn {
-		return db.execPipeline(queries, args, alwaysNewConn)
-	}
-	return res, err
-}
-
-type execer interface {
-	Exec(string, map[string]interface{}) (Result, error)
 }
 
 func (db *DB) exec(query string, args map[string]interface{}, strategy connReuseStrategy) (res Result, err error) {
@@ -968,27 +857,6 @@ func (db *DB) exec(query string, args map[string]interface{}, strategy connReuse
 		return nil, err
 	}
 	return driverResult{dc, resi}, nil
-}
-
-func (db *DB) execPipeline(queries []string, args []map[string]interface{}, strategy connReuseStrategy) (res []Result, err error) {
-	dc, err := db.conn(strategy)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		db.putConn(dc, err)
-	}()
-
-	dc.Lock()
-	resi, err := dc.ci.ExecPipeline(queries, args...)
-	dc.Unlock()
-	if err != nil {
-		return nil, err
-	}
-	for _, result := range resi {
-		res = append(res, driverResult{dc, result})
-	}
-	return res, nil
 }
 
 // Query executes a query that returns rows, typically a SELECT.
@@ -1028,12 +896,7 @@ func (db *DB) queryConn(dc *driverConn, releaseConn func(error), query string, a
 	}
 	// Note: ownership of dc passes to the *Rows, to be freed
 	// with releaseConn.
-	rows := &Rows{
-		dc:          dc,
-		releaseConn: releaseConn,
-		rowsi:       rowsi,
-	}
-	return rows, nil
+	return &Rows{dc: dc, releaseConn: releaseConn, rowsi: rowsi}, nil
 }
 
 // QueryRow executes a query that is expected to return at most one row.
@@ -1073,11 +936,7 @@ func (db *DB) begin(strategy connReuseStrategy) (tx *Tx, err error) {
 		db.putConn(dc, err)
 		return nil, err
 	}
-	return &Tx{
-		db:  db,
-		dc:  dc,
-		txi: txi,
-	}, nil
+	return &Tx{db: db, dc: dc, txi: txi}, nil
 }
 
 // Tx is an in-progress database transaction.
@@ -1299,10 +1158,6 @@ func (tx *Tx) QueryRow(query string, args map[string]interface{}) *Row {
 type connStmt struct {
 	dc *driverConn
 	si stmt
-}
-
-type queryer interface {
-	Query(string, map[string]interface{}) (rows, error)
 }
 
 type stmt interface {
@@ -1614,15 +1469,17 @@ type Rows struct {
 	releaseConn func(error)
 	rowsi       rows
 
-	md        map[string]interface{}
 	closed    bool
 	lastcols  []driver.Value
 	lasterr   error // non-nil only if closed is true
 	closeStmt stmt  // if non-nil, statement to Close on close
 }
 
-func (rs *Rows) Metadata() map[string]interface{} {
-	return rs.md
+// Metadata returns the metadata. Next does not need to be called prior to
+// calling Metadata. Metadata may return different values for each invocation
+// of Next.
+func (rs *Rows) Metadata() (map[string]interface{}, error) {
+	return rs.rowsi.Metadata(), nil
 }
 
 // Next prepares the next result row for reading with the Scan method. It
@@ -1800,7 +1657,7 @@ func (r *Row) Scan(dest ...interface{}) error {
 		if err := r.rows.Err(); err != nil {
 			return err
 		}
-		return ErrNoRows
+		return sql.ErrNoRows
 	}
 	err := r.rows.Scan(dest...)
 	if err != nil {

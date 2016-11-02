@@ -200,7 +200,7 @@ func convertAssign(dest, src interface{}) error {
 		return nil
 	}
 
-	if scanner, ok := dest.(Scanner); ok {
+	if scanner, ok := dest.(sql.Scanner); ok {
 		return scanner.Scan(src)
 	}
 

@@ -82,15 +82,45 @@ type Encoder struct {
 	w *chunkWriter
 }
 
+const DefaultChunkSize = math.MaxUint16
+
 // NewEncoder initializes a new Encoder with the provided chunk size.
-func NewEncoder(w io.Writer, size uint16) *Encoder {
-	return &Encoder{w: &chunkWriter{w: w, buf: make([]byte, size), size: int(size)}}
+func NewEncoder(w io.Writer) *Encoder {
+	const size = DefaultChunkSize
+	return &Encoder{w: &chunkWriter{w: w, buf: make([]byte, size), size: size}}
+}
+
+// SetChunkSize sets the Encoder's chunk size. It flushes any pending writes
+// using the new chunk size.
+func (e *Encoder) SetChunkSize(size uint16) error {
+	if e.w.size == int(size) {
+		return nil
+	}
+	e.w.size = int(size)
+
+	// Create a new buffer if necessary.
+	if e.w.size > len(e.w.buf) {
+		e.w.buf = make([]byte, e.w.size)
+		return nil
+	}
+
+	// Flush what we have so far if our current chunk is >= size.
+	for e.w.n >= e.w.size {
+		e.w.n = e.w.size
+		err := e.w.writeChunk()
+		if err != nil {
+			return err
+		}
+		// Slide our buffer down.
+		e.w.n = copy(e.w.buf[:e.w.size], e.w.buf[e.w.n:])
+	}
+	return nil
 }
 
 // Marshal is used to marshal an object to the bolt interface encoded bytes.
 func Marshal(v interface{}) ([]byte, error) {
 	var b bytes.Buffer
-	err := NewEncoder(&b, math.MaxUint16).Encode(v)
+	err := NewEncoder(&b).Encode(v)
 	return b.Bytes(), err
 }
 

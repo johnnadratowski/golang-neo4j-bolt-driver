@@ -2,58 +2,28 @@ package bolt
 
 import (
 	"database/sql/driver"
+	"fmt"
 
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
-// PipelineStmt represents a set of statements to run against the database
-//
-// PipelineStmt objects, and any rows prepared within ARE NOT
-// THREAD SAFE. If you want to use multiple go routines with these objects,
-// you should use a driver to create a new conn for each routine.
-type PipelineStmt interface {
-	// Close Closes the statement. See sql/driver.Stmt.
-	Close() error
-	// ExecPipeline executes a set of queries that returns no rows.
-	ExecPipeline(params ...map[string]interface{}) ([]Result, error)
-	// QueryPipeline executes a set of queries that return data.
-	// Implements a Neo-friendly alternative to sql/driver.
-	QueryPipeline(params ...map[string]interface{}) (PipelineRows, error)
-}
-
 type boltStmt struct {
-	queries []string
-	query   string
-	conn    *conn
-	closed  bool
-	rows    *boltRows
+	conn   *conn
+	query  string
+	md     map[string]interface{}
+	closed bool
 }
 
-func newStmt(query string, conn *conn) *boltStmt {
-	return &boltStmt{query: query, conn: conn}
-}
-
-func newPipelineStmt(queries []string, conn *boltConn) *boltStmt {
-	return &boltStmt{queries: queries, conn: conn.conn}
-}
-
-// Close Closes the statement. See sql/driver.Stmt.
+// Close Closes the statement.
 func (s *boltStmt) Close() error {
 	if s.closed {
 		return nil
 	}
-
-	if s.rows != nil && !s.rows.closeStatement {
-		if err := s.rows.Close(); err != nil {
-			return err
-		}
+	if s.conn.bad {
+		return driver.ErrBadConn
 	}
-
 	s.closed = true
-	s.conn.statement = nil
-	s.conn = nil
 	return nil
 }
 
@@ -63,8 +33,21 @@ func (s *boltStmt) NumInput() int {
 	return -1 // TODO: would need a cypher parser for this. disable for now
 }
 
-func (s *boltStmt) Exec(args map[string]interface{}) (Result, error) {
-	return nil, nil
+func (s *boltStmt) exec(args map[string]interface{}) error {
+	resp, err := s.conn.sendRunPullAllConsumeRun(s.query, args)
+	if err != nil {
+		s.closed = true
+		return err
+	}
+
+	success, ok := resp.(messages.SuccessMessage)
+	if !ok {
+		s.closed = true
+		return fmt.Errorf("unexpected response querying neo from connection: %#v", resp)
+	}
+
+	s.md = success.Metadata
+	return nil
 }
 
 type sqlStmt struct {
@@ -78,89 +61,27 @@ func (s *sqlStmt) Exec(args []driver.Value) (driver.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.ExecNeo(params)
+	return s.boltStmt.Exec(params)
 }
 
 // ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
-func (s *boltStmt) ExecNeo(params map[string]interface{}) (Result, error) {
+func (s *boltStmt) Exec(params map[string]interface{}) (Result, error) {
 	if s.closed {
 		return nil, errors.New("Neo4j Bolt statement already closed")
 	}
-	if s.rows != nil {
-		return nil, errors.New("Another query is already open")
-	}
-
-	runResp, pullResp, _, err := s.conn.sendRunPullAllConsumeAll(s.query, params)
+	err := s.exec(params)
 	if err != nil {
 		return nil, err
 	}
-
-	success, ok := runResp.(messages.SuccessMessage)
+	_, pull, err := s.conn.consumeAll()
+	if err != nil {
+		return nil, err
+	}
+	success, ok := pull.(messages.SuccessMessage)
 	if !ok {
-		return nil, errors.New("Unrecognized response type when running exec query: %#v", success)
-
+		return nil, errors.New("Unrecognized response when discarding exec rows: %#v", pull)
 	}
-
-	log.Infof("Got run success message: %#v", success)
-
-	success, ok = pullResp.(messages.SuccessMessage)
-	if !ok {
-		return nil, errors.New("Unrecognized response when discarding exec rows: %#v", success)
-	}
-
-	log.Infof("Got discard all success message: %#v", success)
-
-	return newResult(success.Metadata), nil
-}
-
-func (s *boltStmt) ExecPipeline(params ...map[string]interface{}) ([]Result, error) {
-	if s.closed {
-		return nil, errors.New("Neo4j Bolt statement already closed")
-	}
-	if s.rows != nil {
-		return nil, errors.New("Another query is already open")
-	}
-
-	if len(params) != len(s.queries) {
-		return nil, errors.New("Must pass same number of params as there are queries")
-	}
-
-	for i, query := range s.queries {
-		err := s.conn.sendRunPullAll(query, params[i])
-		if err != nil {
-			return nil, errors.Wrap(err, "Error running exec query:\n\n%s\n\nWith Params:\n%#v", query, params[i])
-		}
-	}
-
-	log.Info("Successfully ran all pipeline queries")
-
-	results := make([]Result, len(s.queries))
-	for i := range s.queries {
-		runResp, err := s.conn.consume()
-		if err != nil {
-			return nil, errors.Wrap(err, "An error occurred getting result of exec command: %#v", runResp)
-		}
-
-		success, ok := runResp.(messages.SuccessMessage)
-		if !ok {
-			return nil, errors.New("Unexpected response when getting exec query result: %#v", runResp)
-		}
-
-		_, pullResp, err := s.conn.consumeAll()
-		if err != nil {
-			return nil, errors.Wrap(err, "An error occurred getting result of exec discard command: %#v", pullResp)
-		}
-
-		success, ok = pullResp.(messages.SuccessMessage)
-		if !ok {
-			return nil, errors.New("Unexpected response when getting exec query discard result: %#v", pullResp)
-		}
-
-		results[i] = newResult(success.Metadata)
-
-	}
-
-	return results, nil
+	return boltResult{metadata: success.Metadata}, nil
 }
 
 // Query executes a query that returns data. See sql/driver.Stmt.
@@ -170,68 +91,18 @@ func (s *sqlStmt) Query(args []driver.Value) (driver.Rows, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.queryNeo(params)
-}
-
-// QueryNeo executes a query that returns data. Implements a Neo-friendly alternative to sql/driver.
-func (s *boltStmt) Query(params map[string]interface{}) (rows, error) {
-	return s.queryNeo(params)
-}
-
-func (s *boltStmt) queryNeo(params map[string]interface{}) (*boltRows, error) {
-	if s.closed {
-		return nil, errors.New("Neo4j Bolt statement already closed")
-	}
-	if s.rows != nil {
-		return nil, errors.New("Another query is already open")
-	}
-
-	resp, err := s.conn.sendRunConsume(s.query, params)
+	err = s.exec(params)
 	if err != nil {
 		return nil, err
 	}
-
-	success, ok := resp.(messages.SuccessMessage)
-	if !ok {
-		return nil, errors.New("Unrecognized response type running query: %#v", resp)
-	}
-
-	log.Infof("Got success message on run query: %#v", resp)
-	s.rows = newRows(s, success.Metadata)
-	return s.rows, nil
+	return &boltRows{conn: s.conn, md: s.md}, nil
 }
 
-func (s *boltStmt) QueryPipeline(params ...map[string]interface{}) (PipelineRows, error) {
-	if s.closed {
-		return nil, errors.New("Neo4j Bolt statement already closed")
-	}
-	if s.rows != nil {
-		return nil, errors.New("Another query is already open")
-	}
-
-	if len(params) != len(s.queries) {
-		return nil, errors.New("Must pass same number of params as there are queries")
-	}
-
-	for i, query := range s.queries {
-		err := s.conn.sendRunPullAll(query, params[i])
-		if err != nil {
-			return nil, errors.Wrap(err, "Error running query:\n\n%s\n\nWith Params:\n%#v", query, params[i])
-		}
-	}
-
-	log.Info("Successfully ran all pipeline queries")
-
-	resp, err := s.conn.consume()
+// Query executes a query that returns data. Implements a Neo-friendly alternative to sql/driver.
+func (s *boltStmt) Query(params map[string]interface{}) (rows, error) {
+	err := s.exec(params)
 	if err != nil {
-		return nil, errors.Wrap(err, "An error occurred consuming initial pipeline command")
+		return nil, err
 	}
-
-	success, ok := resp.(messages.SuccessMessage)
-	if !ok {
-		return nil, errors.New("Got unexpected return message when consuming initial pipeline command: %#v", resp)
-	}
-
-	s.rows = newPipelineRows(s, success.Metadata, 0)
-	return s.rows, nil
+	return &boltRows{conn: s.conn, md: s.md}, nil
 }

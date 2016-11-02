@@ -20,5 +20,5 @@ func (i AckFailureMessage) Signature() int {
 
 // AllFields gets the fields to encode for the struct
 func (i AckFailureMessage) AllFields() []interface{} {
-	return []interface{}{}
+	return nil
 }

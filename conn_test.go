@@ -1,9 +1,6 @@
 package bolt
 
-import (
-	"reflect"
-	"testing"
-)
+import "testing"
 
 func newRecorder(t *testing.T, name, dsn string) *DB {
 	db, err := OpenRecorder(name, dsn)
@@ -76,36 +73,14 @@ func TestBoltConn_SelectOne(t *testing.T) {
 	// Records session for testing
 	rec := newRecorder(t, "TestBoltConn_SelectOne", neo4jConnStr)
 
-	rows, err := rec.Query("RETURN 1;", nil)
-	if err != nil {
-		t.Fatalf("An error occurred querying Neo: %s", err)
-	}
-
-	expectedMetadata := map[string]interface{}{
-		"fields": []interface{}{"1"},
-	}
-	if !reflect.DeepEqual(rows.Metadata(), expectedMetadata) {
-		t.Fatalf("Unexpected success metadata. Expected %#v. Got: %#v", expectedMetadata, rows.Metadata())
-	}
-
 	var out int64
-	for rows.Next() {
-		rows.Scan(&out)
-	}
-
-	err = rows.Err()
+	err := rec.QueryRow("RETURN 1;", nil).Scan(&out)
 	if err != nil {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
 	if out != 1 {
 		t.Fatalf("Unexpected output. Expected 1. Got: %d", out)
-	}
-
-	expectedMetadata = map[string]interface{}{"type": "r"}
-	metadata := rows.Metadata()
-	if !reflect.DeepEqual(metadata, expectedMetadata) {
-		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
 	}
 
 	err = rec.Close()
@@ -122,6 +97,7 @@ func TestBoltConn_SelectAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
+
 	affected, err := results.RowsAffected()
 	if err != nil {
 		t.Fatalf("An error occurred getting rows affected: %s", err)
@@ -131,15 +107,38 @@ func TestBoltConn_SelectAll(t *testing.T) {
 	}
 
 	rows, err := rec.Query("MATCH (n:NODE) RETURN n.a ORDER BY n.a", nil)
-	metadata := rows.Metadata()
-
-	var out [2]int64
-	for i := 0; i < len(out) && rows.Next(); i++ {
-		rows.Scan(&out[i])
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	var metadata []map[string]interface{}
+	md, err := rows.Metadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata = append(metadata, md)
+
+	var out []int64
+	var x int64
+	for rows.Next() {
+		rows.Scan(&x)
+		out = append(out, x)
+	}
+
+	md, err = rows.Metadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata = append(metadata, md)
+
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
+
+	if len(out) != 2 {
+		t.Fatalf("wanted len == 2, got %d", len(out))
+	}
+
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -151,11 +150,11 @@ func TestBoltConn_SelectAll(t *testing.T) {
 		t.Fatalf("Incorrect data returned for second row: %#v", out[1])
 	}
 
-	if metadata["fields"].([]interface{})[0] != "n.a" {
+	if metadata[0]["fields"].([]interface{})[0] != "n.a" {
 		t.Fatalf("Unexpected column metadata: %#v", metadata)
 	}
 
-	if metadata["type"].(string) != "r" {
+	if metadata[1]["type"].(string) != "r" {
 		t.Fatalf("Unexpected request metadata: %#v", metadata)
 	}
 
@@ -186,35 +185,6 @@ func TestBoltConn_Ignored(t *testing.T) {
 	// This will make two calls at once - Run and Pull All.  The pull all should be ignored, which is what
 	// we're testing.
 	_, err := rec.Query("syntax error", map[string]interface{}{"foo": 1, "bar": 2.2})
-	if err == nil {
-		t.Fatal("Expected an error on syntax error.")
-	}
-
-	rows, err := rec.Query("RETURN 1;", nil)
-	if err != nil {
-		t.Fatalf("Got error when running next query after a failure: %#v", err)
-	}
-	defer rows.Close()
-
-	var out int64
-	for rows.Next() {
-		rows.Scan(&out)
-	}
-
-	if out != 1 {
-		t.Fatalf("Expected different data from output: %#v", out)
-	}
-}
-
-func TestBoltConn_IgnoredPipeline(t *testing.T) {
-	// Records session for testing
-	rec := newRecorder(t, "TestBoltConn_IgnoredPipeline", neo4jConnStr)
-
-	defer rec.Close()
-
-	// This will make two calls at once - Run and Pull All.  The pull all should be ignored, which is what
-	// we're testing.
-	_, err := rec.ExecPipeline([]string{"syntax error", "syntax error", "syntax error"})
 	if err == nil {
 		t.Fatal("Expected an error on syntax error.")
 	}

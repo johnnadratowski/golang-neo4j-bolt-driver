@@ -20,11 +20,6 @@ func (t *boltTx) Commit() error {
 	if t.closed {
 		return errors.New("Transaction already closed")
 	}
-	if t.conn.statement != nil {
-		if err := t.conn.statement.Close(); err != nil {
-			return errors.Wrap(err, "An error occurred closing open rows in transaction Commit")
-		}
-	}
 
 	successInt, pullInt, err := t.conn.sendRunPullAllConsumeSingle("COMMIT", nil)
 	if err != nil {
@@ -45,7 +40,6 @@ func (t *boltTx) Commit() error {
 
 	log.Infof("Got success message pulling transaction: %#v", pull)
 
-	t.conn.transaction = nil
 	t.closed = true
 	return err
 }
@@ -54,11 +48,6 @@ func (t *boltTx) Commit() error {
 func (t *boltTx) Rollback() error {
 	if t.closed {
 		return errors.New("Transaction already closed")
-	}
-	if t.conn.statement != nil {
-		if err := t.conn.statement.Close(); err != nil {
-			return errors.Wrap(err, "An error occurred closing open rows in transaction Rollback")
-		}
 	}
 
 	successInt, pullInt, err := t.conn.sendRunPullAllConsumeSingle("ROLLBACK", nil)
@@ -80,7 +69,6 @@ func (t *boltTx) Rollback() error {
 
 	log.Infof("Got success message pulling transaction: %#v", pull)
 
-	t.conn.transaction = nil
 	t.closed = true
 	return err
 }
