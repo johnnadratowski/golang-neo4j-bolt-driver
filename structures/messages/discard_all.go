@@ -20,5 +20,5 @@ func (i DiscardAllMessage) Signature() int {
 
 // AllFields gets the fields to encode for the struct
 func (i DiscardAllMessage) AllFields() []interface{} {
-	return []interface{}{}
+	return nil
 }

@@ -13,10 +13,7 @@ type RunMessage struct {
 
 // NewRunMessage Gets a new RunMessage struct
 func NewRunMessage(statement string, parameters map[string]interface{}) RunMessage {
-	return RunMessage{
-		statement:  statement,
-		parameters: parameters,
-	}
+	return RunMessage{statement: statement, parameters: parameters}
 }
 
 // Signature gets the signature byte for the struct

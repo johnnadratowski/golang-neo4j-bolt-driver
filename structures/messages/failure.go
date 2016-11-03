@@ -12,9 +12,7 @@ type FailureMessage struct {
 
 // NewFailureMessage Gets a new FailureMessage struct
 func NewFailureMessage(metadata map[string]interface{}) FailureMessage {
-	return FailureMessage{
-		Metadata: metadata,
-	}
+	return FailureMessage{Metadata: metadata}
 }
 
 // Signature gets the signature byte for the struct

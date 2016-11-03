@@ -1,53 +1,74 @@
-package golangNeo4jBoltDriver
+package bolt
 
 import (
+	"database/sql"
+	"fmt"
 	"os"
 	"testing"
-
-	"time"
-
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"sync"
 )
 
 var (
 	neo4jConnStr = ""
 )
 
-func TestMain(m *testing.M) {
-	log.SetLevel(os.Getenv("BOLT_DRIVER_LOG"))
+func expect(t *testing.T, r *Rows, n int) {
+	if r == nil {
+		if n != 0 {
+			panic(fmt.Sprintf("wanted %d rows, got nil r", n))
+		}
+		return
+	}
+	var err error
+	defer func() {
+		err2 := r.Close()
+		if err2 != nil {
+			if err != nil {
+				panic(fmt.Sprintf("two errors (close and orig): %#v %#v", err2, err))
+			}
+			panic(err2)
+		}
+	}()
+	var i int
+	for r.Next() {
+		i++
+	}
+	if err = r.Err(); err != nil && (err != sql.ErrNoRows && n != 0) {
+		panic(err)
+	}
+	if i != n {
+		panic(fmt.Sprintf("expected %d rows, got %d", n, i))
+	}
+}
 
+func TestMain(m *testing.M) {
 	neo4jConnStr = os.Getenv("NEO4J_BOLT")
 	if neo4jConnStr != "" {
-		log.Info("Using NEO4J for tests:", neo4jConnStr)
+		if testing.Verbose() {
+			fmt.Println("Using NEO4J for tests:", neo4jConnStr)
+		}
 	} else if os.Getenv("ENSURE_NEO4J_BOLT") != "" {
-		log.Fatal("Must give NEO4J_BOLT environment variable")
+		fmt.Println("Must give NEO4J_BOLT environment variable")
+		os.Exit(1)
 	}
-
-	output := m.Run()
 
 	if neo4jConnStr != "" {
 		// If we're using a DB for testing neo, clear it out after all the test runs
-		clearNeo()
+		defer clearNeo()
 	}
+
+	output := m.Run()
 
 	os.Exit(output)
 }
 
 func clearNeo() {
-	driver := NewDriver()
-	conn, err := driver.OpenNeo(neo4jConnStr)
+	db, err := OpenPool(boltName, neo4jConnStr)
 	if err != nil {
-		panic("Error getting conn to clear DB")
+		panic(fmt.Sprintf("error getting conn to clear DB: %s\n", err))
 	}
+	defer db.Close()
 
-	stmt, err := conn.PrepareNeo(`MATCH (n) DETACH DELETE n`)
-	if err != nil {
-		panic("Error getting stmt to clear DB")
-	}
-	defer stmt.Close()
-
-	_, err = stmt.ExecNeo(nil)
+	_, err = db.Exec(`MATCH (n) DETACH DELETE n`, nil)
 	if err != nil {
 		panic("Error running query to clear DB")
 	}
@@ -58,28 +79,13 @@ func TestBoltDriverPool_OpenNeo(t *testing.T) {
 		t.Skip("Cannot run this test when in recording mode")
 	}
 
-	pool, err := NewDriverPool(neo4jConnStr, 25)
+	pool, err := OpenPool(boltName, neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening driver pool: %#v", err)
 	}
-
-	now := time.Now().Unix()
-	for i := 0; i < 25; i++ {
-		go func() {
-			c, err := pool.OpenPool()
-			if err != nil {
-				t.Fatalf("An error occurred opening conn from pool: %#v", err)
-			}
-			defer c.Close()
-			time.Sleep(time.Millisecond * time.Duration(200))
-		}()
+	if err := pool.Close(); err != nil {
+		t.Fatal(err)
 	}
-
-	c, err := pool.OpenPool()
-	if !(time.Now().Unix()-now < 200) {
-		t.Fatalf("An error occurred opening conn from pool at end: %#v", err)
-	}
-	defer c.Close()
 }
 
 func TestBoltDriverPool_Concurrent(t *testing.T) {
@@ -87,125 +93,127 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 		t.Skip("Cannot run this test when in recording mode")
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	driver, err := NewDriverPool(neo4jConnStr, 2)
+	db, err := OpenPool(boltName, neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening driver pool: %#v", err)
 	}
 
-	one := make(chan bool)
-	two := make(chan bool)
-	three := make(chan bool)
-	four := make(chan bool)
-	five := make(chan bool)
-	six := make(chan bool)
-	seven := make(chan bool)
+	var s struct{}
+
+	one := make(chan struct{})
+	two := make(chan struct{})
+	three := make(chan struct{})
+	four := make(chan struct{})
+	five := make(chan struct{})
+	six := make(chan struct{})
+	seven := make(chan struct{})
+	ech := make(chan error)
+	done := make(chan struct{})
+
 	go func() {
-		defer wg.Done()
-
-		conn, err := driver.OpenPool()
+		rows, err := db.Query(`MATCH (n) RETURN n`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred opening conn: %s", err)
+			ech <- err
+			return
 		}
-		defer conn.Close()
-
-		data, _, _, err := conn.QueryNeoAll(`MATCH (n) RETURN n`, nil)
+		err = rows.Close()
 		if err != nil {
-			t.Fatalf("An error occurred querying neo: %s", err)
+			ech <- err
+			return
 		}
 
-		log.Info("1")
-		one <- true
+		t.Log("1")
+		one <- s
 		<-two
 
-		if len(data) != 0 {
-			t.Fatalf("Expected no data: %#v", data)
-		}
+		expect(t, rows, 0)
 
-		data, _, _, err = conn.QueryNeoAll(`MATCH (n) RETURN n`, nil)
+		rows, err = db.Query(`MATCH (n) RETURN n`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred querying neo: %s", err)
+			ech <- err
+			return
 		}
 
-		log.Infof("data: %#v", data)
-		if len(data) != 1 {
-			t.Fatalf("Expected no data: %#v", data)
-		}
+		expect(t, rows, 1)
 
-		log.Info("3")
-		three <- true
+		t.Log("3")
+		three <- s
 		<-four
 
-		data, _, _, err = conn.QueryNeoAll(`MATCH path=(:FOO)-[:BAR]->(:BAZ) RETURN path`, nil)
+		rows, err = db.Query(`MATCH path=(:FOO)-[:BAR]->(:BAZ) RETURN path`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred querying neo: %s", err)
+			ech <- err
+			return
 		}
 
-		if len(data) != 1 {
-			t.Fatalf("Expected no data: %#v", data)
-		}
+		expect(t, rows, 1)
 
-		log.Info("5")
-		five <- true
+		t.Log("5")
+		five <- s
 		<-six
 
-		data, _, _, err = conn.QueryNeoAll(`MATCH path=(:FOO)-[:BAR]->(:BAZ) RETURN path`, nil)
+		rows, err = db.Query(`MATCH path=(:FOO)-[:BAR]->(:BAZ) RETURN path`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred querying neo: %s", err)
+			ech <- err
+			return
 		}
 
-		if len(data) != 0 {
-			t.Fatalf("Expected no data: %#v", data)
-		}
+		expect(t, rows, 0)
 
-		log.Info("7")
-		seven <- true
+		t.Log("7")
+		seven <- s
 	}()
 
 	go func() {
 		<-one
-		defer wg.Done()
 
-		conn, err := driver.OpenPool()
+		_, err := db.Exec(`CREATE (f:FOO)`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred opening conn: %s", err)
-		}
-		defer conn.Close()
-
-		_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
-		if err != nil {
-			t.Fatalf("An error occurred creating f neo: %s", err)
+			ech <- err
+			return
 		}
 
-		log.Info("2")
-		two <- true
+		t.Log("2")
+		two <- s
 		<-three
 
-		_, err = conn.ExecNeo(`MATCH (f:FOO) CREATE UNIQUE (f)-[b:BAR]->(c:BAZ)`, nil)
+		_, err = db.Exec(`MATCH (f:FOO) CREATE UNIQUE (f)-[b:BAR]->(c:BAZ)`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred creating f neo: %s", err)
+			ech <- err
+			return
 		}
 
-		log.Info("4")
-		four <- true
+		t.Log("4")
+		four <- s
 		<-five
 
-		_, err = conn.ExecNeo(`MATCH (:FOO)-[b:BAR]->(:BAZ) DELETE b`, nil)
+		_, err = db.Exec(`MATCH (:FOO)-[b:BAR]->(:BAZ) DELETE b`, nil)
 		if err != nil {
 			t.Fatalf("An error occurred creating f neo: %s", err)
 		}
 
-		_, err = conn.ExecNeo(`MATCH (n) DETACH DELETE n`, nil)
+		_, err = db.Exec(`MATCH (n) DETACH DELETE n`, nil)
 		if err != nil {
-			t.Fatalf("An error occurred creating f neo: %s", err)
+			ech <- err
+			return
 		}
 
-		log.Info("6")
-		six <- true
+		t.Log("6")
+		six <- s
 		<-seven
-
+		done <- s
 	}()
 
-	wg.Wait()
+	for {
+		select {
+		case err := <-ech:
+			t.Fatal(err)
+		case <-done:
+			err = db.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+	}
 }
