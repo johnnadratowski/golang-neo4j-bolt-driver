@@ -46,18 +46,6 @@ func sliceInterfaceToNode(from []interface{}) ([]graph.Node, error) {
 	return to, nil
 }
 
-func sliceInterfaceToRelationship(from []interface{}) ([]graph.Relationship, error) {
-	to := make([]graph.Relationship, len(from))
-	for i, item := range from {
-		rel, ok := item.(graph.Relationship)
-		if !ok {
-			return nil, errtype("graph.Relationship", item)
-		}
-		to[i] = rel
-	}
-	return to, nil
-}
-
 func sliceInterfaceToUnboundRelationship(from []interface{}) ([]graph.UnboundRelationship, error) {
 	to := make([]graph.UnboundRelationship, len(from))
 	for i, item := range from {

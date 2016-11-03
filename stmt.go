@@ -134,7 +134,7 @@ func (s *sqlStmt) Exec(args []driver.Value) (driver.Result, error) {
 	return s.boltStmt.Exec(params)
 }
 
-// ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
+// ExecNeo executes a query that returns no rows.
 func (s *boltStmt) Exec(params map[string]interface{}) (Result, error) {
 	if s.closed {
 		return nil, errors.New("Neo4j Bolt statement already closed")
@@ -168,7 +168,7 @@ func (s *sqlStmt) Query(args []driver.Value) (driver.Rows, error) {
 	return &boltRows{conn: s.conn, md: s.md}, nil
 }
 
-// Query executes a query that returns data. Implements a Neo-friendly alternative to sql/driver.
+// Query executes a query that returns data.
 func (s *boltStmt) Query(params map[string]interface{}) (rows, error) {
 	err := s.exec(params)
 	if err != nil {

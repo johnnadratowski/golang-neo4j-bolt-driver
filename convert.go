@@ -18,69 +18,6 @@ import (
 
 var errNilPtr = errors.New("destination pointer is nil") // embedded in descriptive error
 
-// driverArgs converts arguments from callers of Stmt.Exec and
-// Stmt.Query into driver Values.
-//
-// The statement ds may be nil, if no statement is available.
-func driverArgs(ds *driverStmt, args []interface{}) ([]driver.Value, error) {
-	dargs := make([]driver.Value, len(args))
-	var si stmt
-	if ds != nil {
-		si = ds.si
-	}
-	cc, ok := si.(driver.ColumnConverter)
-
-	// Normal path, for a driver.Stmt that is not a ColumnConverter.
-	if !ok {
-		for n, arg := range args {
-			var err error
-			dargs[n], err = driver.DefaultParameterConverter.ConvertValue(arg)
-			if err != nil {
-				return nil, fmt.Errorf("sql: converting Exec argument #%d's type: %v", n, err)
-			}
-		}
-		return dargs, nil
-	}
-
-	// Let the Stmt convert its own arguments.
-	for n, arg := range args {
-		// First, see if the value itself knows how to convert
-		// itself to a driver type. For example, a NullString
-		// struct changing into a string or nil.
-		if svi, ok := arg.(driver.Valuer); ok {
-			sv, err := svi.Value()
-			if err != nil {
-				return nil, fmt.Errorf("sql: argument index %d from Value: %v", n, err)
-			}
-			if !driver.IsValue(sv) {
-				return nil, fmt.Errorf("sql: argument index %d: non-subset type %T returned from Value", n, sv)
-			}
-			arg = sv
-		}
-
-		// Second, ask the column to sanity check itself. For
-		// example, drivers might use this to make sure that
-		// an int64 values being inserted into a 16-bit
-		// integer field is in range (before getting
-		// truncated), or that a nil can't go into a NOT NULL
-		// column before going across the network to get the
-		// same error.
-		var err error
-		ds.Lock()
-		dargs[n], err = cc.ColumnConverter(n).ConvertValue(arg)
-		ds.Unlock()
-		if err != nil {
-			return nil, fmt.Errorf("sql: converting argument #%d's type: %v", n, err)
-		}
-		if !driver.IsValue(dargs[n]) {
-			return nil, fmt.Errorf("sql: driver ColumnConverter error converted %T to unsupported type %T",
-				arg, dargs[n])
-		}
-	}
-
-	return dargs, nil
-}
-
 // convertAssign copies to dest the value in src, converting it if possible.
 // An error is returned if the copy would result in loss of information.
 // dest should be a pointer type.

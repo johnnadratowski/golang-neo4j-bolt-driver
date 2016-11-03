@@ -130,9 +130,6 @@ func dial(d Dialer, v values) (net.Conn, error) {
 	}
 	if timeout != 0 {
 		return d.DialTimeout("tcp", addr, timeout)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return d.Dial("tcp", addr)
 }

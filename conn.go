@@ -12,15 +12,17 @@ import (
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
+var ErrInFailedTransaction = errors.New("bolt: Could not complete operation in a failed transaction")
+
 func errBadResp(action string, v interface{}) error {
 	return fmt.Errorf("unrecognized response while %s: %#v", action, v)
 }
 
-// Conn represents a connection to Neo4J implementing a Neo-friendly interface.
-// Some of the features of this interface implement Neo-specific features
-// unavailable in the sql/driver compatible interface.
+// Conn is a connection to Neo4J. It's interface is similar to that of sql.DB,
+// with some minor modifications for ease of use. In particular, the variadic
+// arguments in Query, Exec, etc. have been replaced with map[string]interface{}.
 type Conn interface {
-	// Prepare prepares a neo4j specific statement.
+	// Prepare returns a prepared statement, bound to this connection.
 	Prepare(query string) (stmt, error)
 
 	// Query queries using the Neo4j-specific interface.
@@ -29,18 +31,17 @@ type Conn interface {
 	// Exec executes a query using the Neo4j-specific interface.
 	Exec(query string, params map[string]interface{}) (Result, error)
 
-	// Close closes the connection.
+	// Close closes the current connection, invalidating any transactions
+	// and statements.
 	Close() error
 
 	// Begin starts a new transaction.
 	Begin() (driver.Tx, error)
 
-	// SetChunkSize is used to set the max chunk size of the
-	// bytes to send to Neo4j at once.
+	// SetChunkSize sets the maximum chunk size for writes to Neo4j.
 	SetChunkSize(uint16)
 
-	// SetTimeout sets the read/write timeouts for the
-	// connection to Neo4j.
+	// SetTimeout sets the read and write timeouts for the connection.
 	SetTimeout(time.Duration)
 }
 
@@ -53,15 +54,21 @@ const (
 )
 
 type conn struct {
-	conn    net.Conn
-	dec     *encoding.Decoder
-	enc     *encoding.Encoder
+	conn net.Conn
+
+	// dec and enc should not be used outright--use the decode and encode
+	// methods instead
+	dec *encoding.Decoder
+	enc *encoding.Encoder
+
 	timeout time.Duration
 	size    uint16
 	status  status
 	bad     bool
 }
 
+// decode returns the next message from the connection if it exists. It returns
+// io.EOF when the stream has finished.
 func (c *conn) decode() (interface{}, error) {
 	if c.dec == nil {
 		c.dec = encoding.NewDecoder(c)
@@ -72,6 +79,7 @@ func (c *conn) decode() (interface{}, error) {
 	return c.dec.Decode()
 }
 
+// encode writes the bolt-encoded form of v to the connection.
 func (c *conn) encode(v interface{}) error {
 	if c.enc == nil {
 		c.enc = encoding.NewEncoder(c)
@@ -80,6 +88,7 @@ func (c *conn) encode(v interface{}) error {
 	return c.enc.Encode(v)
 }
 
+// newConn creates a new Neo4j connection using the provided values.
 func newConn(netcn net.Conn, v values) (*conn, error) {
 	timeout, err := parseTimeout(v.get("timeout"))
 	if err != nil {
@@ -112,6 +121,7 @@ func newConn(netcn net.Conn, v values) (*conn, error) {
 	return c, nil
 }
 
+// handshake completes the bolt protocol's version handshake.
 func (c *conn) handShake() error {
 	_, err := c.Write(handShake)
 	if err != nil {
@@ -151,14 +161,16 @@ func (c *conn) Close() error {
 	if c.bad {
 		return driver.ErrBadConn
 	}
+	c.status = statusIdle
 	err := c.conn.Close()
 	c.bad = err == nil
 	return err
 }
 
-func (c *conn) ackFailure(failure messages.FailureMessage) error {
-	ack := messages.NewAckFailureMessage()
-	err := c.encode(ack)
+// ackFailure responds to a failure message allowing the connection to proceed.
+// https://github.com/neo4j-contrib/boltkit/blob/b2739a15871aae8469363b0298f8765a4ec77a9a/boltkit/driver.py#L662
+func (c *conn) ackFailure() error {
+	err := c.encode(messages.NewAckFailureMessage())
 	if err != nil {
 		return err
 	}
@@ -183,9 +195,10 @@ func (c *conn) ackFailure(failure messages.FailureMessage) error {
 	}
 }
 
+// reset clears the connection.
+// https://github.com/neo4j-contrib/boltkit/blob/b2739a15871aae8469363b0298f8765a4ec77a9a/boltkit/driver.py#L672
 func (c *conn) reset() error {
-	reset := messages.NewResetMessage()
-	err := c.encode(reset)
+	err := c.encode(messages.NewResetMessage())
 	if err != nil {
 		return err
 	}
@@ -211,7 +224,7 @@ func (c *conn) reset() error {
 	}
 }
 
-// Prepare prepares a new statement for a query. Implements a Neo-friendly alternative to sql/driver.
+// Prepare prepares a new statement for a query.
 func (c *conn) Prepare(query string) (stmt, error) {
 	return c.prepare(query)
 }
@@ -223,50 +236,94 @@ func (c *conn) prepare(query string) (*boltStmt, error) {
 	return &boltStmt{conn: c, query: query}, nil
 }
 
-// Begin begins a new transaction with the Neo4J Database
-func (c *conn) Begin() (driver.Tx, error) {
-	if c.bad {
-		return nil, driver.ErrBadConn
-	}
+type txQuery string
 
-	sifc, pifc, err := c.sendRunPullAllConsumeSingle("BEGIN", nil)
-	if err != nil {
-		return nil, err
-	}
+const (
+	begin    txQuery = "BEGIN"
+	commit   txQuery = "COMMIT"
+	rollback txQuery = "ROLLBACK"
+)
 
-	success, ok := sifc.(messages.SuccessMessage)
-	if !ok {
-		return nil, errBadResp("beginning transaction", success)
+func (t txQuery) verb() string {
+	switch t {
+	case begin:
+		return "beginning"
+	case commit:
+		return "committing"
+	case rollback:
+		return "rolling back"
+	default:
+		return "unknown"
 	}
-
-	success, ok = pifc.(messages.SuccessMessage)
-	if !ok {
-		return nil, errBadResp("pulling transaction", success)
-	}
-	return c, nil
 }
 
-// Commit commits and closes the transaction
-func (c *conn) Commit() error {
-	if c.bad {
-		return driver.ErrBadConn
+// transac executes the given transaction query.
+func (c *conn) transac(query txQuery) error {
+	switch query {
+	case begin, commit, rollback:
+	default:
+		return fmt.Errorf("invalid transaction query: %q", query)
 	}
 
-	sifc, pifc, err := c.sendRunPullAllConsumeSingle("COMMIT", nil)
+	sifc, pifc, err := c.sendRunPullAllConsumeSingle(string(query), nil)
 	if err != nil {
 		return err
 	}
 
 	success, ok := sifc.(messages.SuccessMessage)
 	if !ok {
-		return errBadResp("committing transaction", success)
+		return errBadResp(query.verb()+" transaction", success)
 	}
 
 	pull, ok := pifc.(messages.SuccessMessage)
 	if !ok {
-		return errBadResp("pulling transaction", pull)
+		c.status = statusInBadTx
+		return errBadResp("pulling transaction response", pull)
 	}
-	return err
+	return nil
+}
+
+func (c *conn) checktx(intx bool) error {
+	if (c.status == statusInTx || c.status == statusInBadTx) != intx {
+		c.bad = true
+		return fmt.Errorf("unexpected transaction status: %v", c.status)
+	}
+	return nil
+}
+
+// Begin begins a new transaction with the Neo4J Database
+func (c *conn) Begin() (driver.Tx, error) {
+	if c.bad {
+		return nil, driver.ErrBadConn
+	}
+	err := c.checktx(false)
+	if err != nil {
+		return nil, err
+	}
+	err = c.transac(begin)
+	if err != nil {
+		return nil, err
+	}
+	c.status = statusInTx
+	return c, nil
+}
+
+// Commit commits and closes the transaction.
+func (c *conn) Commit() error {
+	if c.bad {
+		return driver.ErrBadConn
+	}
+	err := c.checktx(true)
+	if err != nil {
+		return err
+	}
+	if c.status == statusInBadTx {
+		if err := c.Rollback(); err != nil {
+			return err
+		}
+		return ErrInFailedTransaction
+	}
+	return c.transac(commit)
 }
 
 // Rollback rolls back and closes the transaction
@@ -274,24 +331,16 @@ func (c *conn) Rollback() error {
 	if c.bad {
 		return errors.New("transaction already closed")
 	}
-
-	sifc, pifc, err := c.sendRunPullAllConsumeSingle("ROLLBACK", nil)
+	err := c.checktx(true)
 	if err != nil {
 		return err
 	}
-
-	success, ok := sifc.(messages.SuccessMessage)
-	if !ok {
-		return errBadResp("rolling back transaction", success)
+	err = c.transac(rollback)
+	if err != nil {
+		return err
 	}
-
-	pull, ok := pifc.(messages.SuccessMessage)
-	if !ok {
-		return errBadResp("pulling transaction", pull)
-	}
-
-	c.bad = true
-	return err
+	c.status = statusIdle
+	return nil
 }
 
 // Sets the size of the chunks to write to the stream
@@ -316,17 +365,19 @@ func (c *conn) query(query string, args map[string]interface{}) (*boltRows, erro
 	return &boltRows{conn: c, md: stmt.md}, nil
 }
 
+// consume returns the next value from the connection, acknowledging any
+// failures that occurred.
 func (c *conn) consume() (interface{}, error) {
 	resp, err := c.decode()
 	if err != nil {
 		return resp, err
 	}
-	if failure, ok := resp.(messages.FailureMessage); ok {
-		err := c.ackFailure(failure)
+	if fail, ok := resp.(messages.FailureMessage); ok {
+		err := c.ackFailure()
 		if err != nil {
 			return nil, err
 		}
-		return failure, nil
+		return fail, nil
 	}
 	return resp, err
 }
@@ -382,8 +433,7 @@ func (c *conn) sendRunConsume(query string, args map[string]interface{}) (interf
 }
 
 func (c *conn) pullAll() error {
-	pullAllMessage := messages.NewPullAllMessage()
-	return c.encode(pullAllMessage)
+	return c.encode(messages.NewPullAllMessage())
 }
 
 func (c *conn) pullAllConsume() (interface{}, error) {

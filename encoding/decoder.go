@@ -188,7 +188,7 @@ func (d *Decoder) decode() (interface{}, error) {
 	case Int64Marker:
 		var out int64
 		err := d.read(&out)
-		return int64(out), err
+		return out, err
 	case FloatMarker:
 		var out float64
 		err := d.read(&out)

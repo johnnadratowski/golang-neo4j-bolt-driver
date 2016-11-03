@@ -10,7 +10,6 @@ func (c *boltConn) Query(query string, params map[string]interface{}) (rows, err
 	return c.conn.query(query, params)
 }
 
-// Exec executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
 func (c *boltConn) Exec(query string, args map[string]interface{}) (Result, error) {
 	if c.bad {
 		return nil, driver.ErrBadConn
@@ -24,7 +23,6 @@ type sqlConn struct {
 	*conn
 }
 
-// Prepare
 func (c *sqlConn) Prepare(query string) (driver.Stmt, error) {
 	stmt, err := c.prepare(query)
 	if err != nil {
@@ -41,7 +39,6 @@ func (c *sqlConn) Query(query string, args []driver.Value) (driver.Rows, error) 
 	return c.conn.query(query, params)
 }
 
-// Exec executes a query that returns no rows.
 func (c *sqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	if c.bad {
 		return nil, driver.ErrBadConn

@@ -211,7 +211,7 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 
 	expected := "Collections containing mixed types can not be stored in properties"
 	if !strings.Contains(err.Error(), expected) {
-		t.Fatalf("Did not recieve expected error: %s", err)
+		t.Fatalf("Did not receive expected error: %s", err)
 	}
 
 	err = driver.Close()

@@ -7,7 +7,6 @@ import (
 )
 
 func TestBoltTx_Commit(t *testing.T) {
-
 	// Records session for testing
 	driver := newRecorder(t, "TestBoltTx_Commit", neo4jConnStr)
 
@@ -16,7 +15,7 @@ func TestBoltTx_Commit(t *testing.T) {
 		t.Fatalf("an error occurred beginning transaction: %s", err)
 	}
 
-	stmt, err := driver.Prepare(`CREATE (f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN f, b, c, d, e`)
+	stmt, err := tx.Prepare(`CREATE (f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN f, b, c, d, e`)
 	if err != nil {
 		t.Fatalf("an error occurred preparing statement: %s", err)
 	}
@@ -30,14 +29,14 @@ func TestBoltTx_Commit(t *testing.T) {
 		t.Fatalf("expected 5 rows affected: %#v err: %#v", result.Metadata(), err)
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		t.Fatalf("an error occurred committing transaction: %s", err)
-	}
-
 	err = stmt.Close()
 	if err != nil {
 		t.Fatalf("an error occurred closing statement")
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		t.Fatalf("an error occurred committing transaction: %s", err)
 	}
 
 	stmt, err = driver.Prepare(`MATCH (f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN f, b, c, d, e`)
@@ -54,9 +53,12 @@ func TestBoltTx_Commit(t *testing.T) {
 	for rows.Next() {
 		rows.Scan(output...)
 	}
+	deref(output...)
+
 	if err := rows.Err(); err != nil {
 		t.Fatalf("an error occurred getting next row: %s", err)
 	}
+
 	err = rows.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +115,7 @@ func TestBoltTx_Rollback(t *testing.T) {
 		t.Fatalf("an error occurred beginning transaction: %s", err)
 	}
 
-	stmt, err := driver.Prepare(`CREATE (f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN f, b, c, d, e`)
+	stmt, err := tx.Prepare(`CREATE (f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN f, b, c, d, e`)
 	if err != nil {
 		t.Fatalf("an error occurred preparing statement: %s", err)
 	}
@@ -127,14 +129,14 @@ func TestBoltTx_Rollback(t *testing.T) {
 		t.Fatalf("expected 5 rows affected: %#v err: %#v", result.Metadata(), err)
 	}
 
-	err = tx.Rollback()
-	if err != nil {
-		t.Fatalf("an error occurred committing transaction: %s", err)
-	}
-
 	err = stmt.Close()
 	if err != nil {
 		t.Fatalf("an error occurred closing statement")
+	}
+
+	err = tx.Rollback()
+	if err != nil {
+		t.Fatalf("an error occurred committing transaction: %s", err)
 	}
 
 	stmt, err = driver.Prepare(`MATCH (f:FOO {a: "1"})-[b:TO]->(c:BAR)<-[d:FROM]-(e:BAZ) RETURN f, b, c, d, e`)

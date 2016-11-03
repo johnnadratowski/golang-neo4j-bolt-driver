@@ -32,8 +32,6 @@ func OpenRecorder(name, dataSourceName string) (*DB, error) {
 	return db, nil
 }
 
-const defaultTimeout = 5
-
 // Open opens a simulated Neo4j connection using pre-recorded data if name is
 // an empty string. Otherwise, it opens up an actual connection using that to
 // create a new recording.
