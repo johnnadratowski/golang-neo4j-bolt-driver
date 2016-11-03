@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
 )
 
 // recorder records a given session with Neo4j.
@@ -94,15 +94,15 @@ func (r *recorder) Read(p []byte) (n int, err error) {
 	}
 
 	if r.cur >= len(r.events) {
-		return 0, errors.New("Trying to read past all of the events in the recorder! %#v", r)
+		return 0, fmt.Errorf("trying to read past all of the events in the recorder %#v", r)
 	}
 	event := r.events[r.cur]
 	if event.IsWrite {
-		return 0, errors.New("Recorder expected Read, got Write! %#v, Event: %#v", r, event)
+		return 0, fmt.Errorf("recorder expected Read, got Write %#v, Event: %#v", r, event)
 	}
 
 	if len(p) > len(event.Event) {
-		return 0, errors.New("Attempted to read past current event in recorder! Bytes: %s. Recorder %#v, Event; %#v", p, r, event)
+		return 0, fmt.Errorf("attempted to read past current event in recorder Bytes: %s. Recorder %#v, Event; %#v", p, r, event)
 	}
 
 	n = copy(p, event.Event)
@@ -124,10 +124,10 @@ func (r *recorder) Close() error {
 	}
 	if len(r.events) > 0 {
 		if r.cur != len(r.events) {
-			return errors.New("Didn't read all of the events in the recorder on close! %#v", r)
+			return fmt.Errorf("didn't read all of the events in the recorder on close %#v", r)
 		}
 		if len(r.events[len(r.events)-1].Event) != 0 {
-			return errors.New("Left data in an event in the recorder on close! %#v", r)
+			return fmt.Errorf("left data in an event in the recorder on close %#v", r)
 		}
 	}
 	return nil
@@ -143,15 +143,15 @@ func (r *recorder) Write(b []byte) (n int, err error) {
 	}
 
 	if r.cur >= len(r.events) {
-		return 0, errors.New("Trying to write past all of the events in the recorder! %#v", r)
+		return 0, fmt.Errorf("trying to write past all of the events in the recorder %#v", r)
 	}
 	event := r.events[r.cur]
 	if !event.IsWrite {
-		return 0, errors.New("Recorder expected Write, got Read! %#v, Event: %#v", r, event)
+		return 0, fmt.Errorf("recorder expected Write, got Read %#v, Event: %#v", r, event)
 	}
 
 	if len(b) > len(event.Event) {
-		return 0, errors.New("Attempted to write past current event in recorder! Bytes: %s. Recorder %#v, Event; %#v", b, r, event)
+		return 0, fmt.Errorf("attempted to write past current event in recorder Bytes: %s. Recorder %#v, Event; %#v", b, r, event)
 	}
 
 	event.Event = event.Event[len(b):]

@@ -2,10 +2,11 @@ package bolt
 
 import (
 	"database/sql/driver"
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/graph"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
@@ -125,6 +126,6 @@ func (r *boltRows) next() ([]interface{}, error) {
 		r.md = nil
 		return t.Fields, nil
 	default:
-		return nil, errors.New("Unrecognized response type getting next query row: %#v", resp)
+		return nil, fmt.Errorf("Unrecognized response type getting next query row: %#v", resp)
 	}
 }

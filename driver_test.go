@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 )
 
 var (
@@ -43,8 +41,6 @@ func expect(t *testing.T, r *Rows, n int) {
 }
 
 func TestMain(m *testing.M) {
-	log.SetLevel(os.Getenv("BOLT_DRIVER_LOG"))
-
 	neo4jConnStr = os.Getenv("NEO4J_BOLT")
 	if neo4jConnStr != "" {
 		if testing.Verbose() {

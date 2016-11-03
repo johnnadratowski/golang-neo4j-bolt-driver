@@ -3,10 +3,11 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 	"math"
 
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures"
 )
 
@@ -217,9 +218,12 @@ func (e *Encoder) Encode(val interface{}) error {
 func (e *Encoder) encode(val interface{}) error {
 	switch val := val.(type) {
 	case nil:
-		return e.encodeNil()
+		return e.w.writeMarker(NilMarker)
 	case bool:
-		return e.encodeBool(val)
+		if val {
+			return e.w.writeMarker(TrueMarker)
+		}
+		return e.w.writeMarker(FalseMarker)
 	case int:
 		return e.encodeInt(int64(val))
 	case int8:
@@ -232,7 +236,7 @@ func (e *Encoder) encode(val interface{}) error {
 		return e.encodeInt(val)
 	case uint:
 		if ^uint(0) > math.MaxUint64 && val > math.MaxInt64 {
-			return errors.New("integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
+			return fmt.Errorf("integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
 		}
 		return e.encodeInt(int64(val))
 	case uint8:
@@ -243,7 +247,7 @@ func (e *Encoder) encode(val interface{}) error {
 		return e.encodeInt(int64(val))
 	case uint64:
 		if val > math.MaxInt64 {
-			return errors.New("integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
+			return fmt.Errorf("integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
 		}
 		return e.encodeInt(int64(val))
 	case float32:
@@ -259,70 +263,59 @@ func (e *Encoder) encode(val interface{}) error {
 	case structures.Structure:
 		return e.encodeStructure(val)
 	default:
-		return errors.New("unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
+		return fmt.Errorf("unrecognized type when encoding data for Bolt transport: %T %+v", val, val)
 	}
-}
-
-func (e *Encoder) encodeNil() error {
-	return e.w.writeMarker(NilMarker)
-}
-
-func (e *Encoder) encodeBool(val bool) (err error) {
-	if val {
-		return e.w.writeMarker(TrueMarker)
-	}
-	return e.w.writeMarker(FalseMarker)
 }
 
 func (e *Encoder) encodeInt(val int64) (err error) {
 	switch {
-	case val >= math.MinInt64 && val < math.MinInt32:
+	case val < math.MinInt32:
 		// Write as INT_64
 		if err = e.w.writeMarker(Int64Marker); err != nil {
 			return err
 		}
 		return e.write(val)
-	case val >= math.MinInt32 && val < math.MinInt16:
+	case val < math.MinInt16:
 		// Write as INT_32
 		if err = e.w.writeMarker(Int32Marker); err != nil {
 			return err
 		}
 		return e.write(int32(val))
-	case val >= math.MinInt16 && val < math.MinInt8:
+	case val < math.MinInt8:
 		// Write as INT_16
 		if err = e.w.writeMarker(Int16Marker); err != nil {
 			return err
 		}
 		return e.write(int16(val))
-	case val >= math.MinInt8 && val < -16:
+	case val < -16:
 		// Write as INT_8
 		if err = e.w.writeMarker(Int8Marker); err != nil {
 			return err
 		}
 		return e.write(int8(val))
-	case val >= -16 && val <= math.MaxInt8:
+	case val < math.MaxInt8:
 		// Write as TINY_INT
 		return e.write(int8(val))
-	case val > math.MaxInt8 && val <= math.MaxInt16:
+	case val < math.MaxInt16:
 		// Write as INT_16
 		if err = e.w.writeMarker(Int16Marker); err != nil {
 			return err
 		}
 		return e.write(int16(val))
-	case val > math.MaxInt16 && val <= math.MaxInt32:
+	case val < math.MaxInt32:
 		// Write as INT_32
 		if err = e.w.writeMarker(Int32Marker); err != nil {
 			return err
 		}
 		return e.write(int32(val))
-	case val > math.MaxInt32 && val <= math.MaxInt64:
+	case val <= math.MaxInt64:
 		// Write as INT_64
 		if err = e.w.writeMarker(Int64Marker); err != nil {
 			return err
 		}
 		return e.write(val)
 	default:
-		return errors.New("Int too long to write: %d", val)
+		return fmt.Errorf("Int too long to write: %d", val)
 	}
 }
 
@@ -343,20 +336,20 @@ func (e *Encoder) encodeString(str string) (err error) {
 		}
 		_, err = e.w.WriteString(str)
 		return err
-	case length > 15 && length <= math.MaxUint8:
+	case length <= math.MaxUint8:
 		if err = e.w.writeMarker(String8Marker); err != nil {
 			return err
 		}
-		if err = e.write(int8(length)); err != nil {
+		if err = e.write(uint8(length)); err != nil {
 			return err
 		}
 		_, err = e.w.WriteString(str)
 		return err
-	case length > math.MaxUint8 && length <= math.MaxUint16:
+	case length <= math.MaxUint16:
 		if err = e.w.writeMarker(String16Marker); err != nil {
 			return err
 		}
-		if err = e.write(int16(length)); err != nil {
+		if err = e.write(uint16(length)); err != nil {
 			return err
 		}
 		_, err = e.w.WriteString(str)
@@ -365,7 +358,7 @@ func (e *Encoder) encodeString(str string) (err error) {
 		if err = e.w.writeMarker(String32Marker); err != nil {
 			return err
 		}
-		if err = e.write(int32(length)); err != nil {
+		if err = e.write(uint32(length)); err != nil {
 			return err
 		}
 		_, err = e.w.WriteString(str)
@@ -383,25 +376,25 @@ func (e *Encoder) encodeSlice(val []interface{}) (err error) {
 		if err != nil {
 			return err
 		}
-	case length > 15 && length <= math.MaxUint8:
+	case length <= math.MaxUint8:
 		if err = e.w.writeMarker(Slice8Marker); err != nil {
 			return err
 		}
-		if err = e.write(int8(length)); err != nil {
+		if err = e.write(uint8(length)); err != nil {
 			return err
 		}
-	case length > math.MaxUint8 && length <= math.MaxUint16:
+	case length <= math.MaxUint16:
 		if err = e.w.writeMarker(Slice16Marker); err != nil {
 			return err
 		}
-		if err = e.write(int16(length)); err != nil {
+		if err = e.write(uint16(length)); err != nil {
 			return err
 		}
-	case length >= math.MaxUint16 && length <= math.MaxUint32:
+	case length <= math.MaxUint32:
 		if err := e.w.writeMarker(Slice32Marker); err != nil {
 			return err
 		}
-		if err = e.write(int32(length)); err != nil {
+		if err = e.write(uint32(length)); err != nil {
 			return err
 		}
 	default:
@@ -410,39 +403,41 @@ func (e *Encoder) encodeSlice(val []interface{}) (err error) {
 
 	// Encode Slice values
 	for _, item := range val {
-		if err := e.encode(item); err != nil {
+		err = e.encode(item)
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *Encoder) encodeMap(val map[string]interface{}) error {
+func (e *Encoder) encodeMap(val map[string]interface{}) (err error) {
 	length := len(val)
 	switch {
 	case length <= 15:
-		if _, err := e.w.Write([]byte{byte(TinyMapMarker + length)}); err != nil {
+		err = e.w.writeMarker(TinyMapMarker + uint8(length))
+		if err != nil {
 			return err
 		}
-	case length > 15 && length <= math.MaxUint8:
-		if err := e.w.writeMarker(Map8Marker); err != nil {
+	case length <= math.MaxUint8:
+		if err = e.w.writeMarker(Map8Marker); err != nil {
 			return err
 		}
-		if err := e.write(int8(length)); err != nil {
+		if err = e.write(uint8(length)); err != nil {
 			return err
 		}
-	case length > math.MaxUint8 && length <= math.MaxUint16:
-		if err := e.w.writeMarker(Map16Marker); err != nil {
+	case length <= math.MaxUint16:
+		if err = e.w.writeMarker(Map16Marker); err != nil {
 			return err
 		}
-		if err := e.write(int16(length)); err != nil {
+		if err = e.write(uint16(length)); err != nil {
 			return err
 		}
-	case length >= math.MaxUint16 && length <= math.MaxUint32:
-		if err := e.w.writeMarker(Map32Marker); err != nil {
+	case length <= math.MaxUint32:
+		if err = e.w.writeMarker(Map32Marker); err != nil {
 			return err
 		}
-		if err := e.write(int32(length)); err != nil {
+		if err = e.write(uint32(length)); err != nil {
 			return err
 		}
 	default:
@@ -470,32 +465,33 @@ func (e *Encoder) encodeStructure(val structures.Structure) (err error) {
 		if err != nil {
 			return err
 		}
-	case length > 15 && length <= math.MaxUint8:
+	case length <= math.MaxUint8:
 		if err = e.w.writeMarker(Struct8Marker); err != nil {
 			return err
 		}
-		if err = e.write(int8(length)); err != nil {
+		if err = e.write(uint8(length)); err != nil {
 			return err
 		}
-	case length > math.MaxUint8 && length <= math.MaxUint16:
+	case length <= math.MaxUint16:
 		if err = e.w.writeMarker(Struct16Marker); err != nil {
 			return err
 		}
-		if err = e.write(int16(length)); err != nil {
+		if err = e.write(uint16(length)); err != nil {
 			return err
 		}
 	default:
 		return errors.New("structure too large to write")
 	}
 
-	_, err = e.w.Write([]byte{byte(val.Signature())})
+	err = e.w.writeMarker(uint8(val.Signature()))
 	if err != nil {
-		return errors.Wrap(err, "An error occurred writing to encoder a struct field")
+		return err
 	}
 
 	for _, field := range fields {
-		if err := e.encode(field); err != nil {
-			return errors.Wrap(err, "An error occurred encoding a struct field")
+		err = e.encode(field)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

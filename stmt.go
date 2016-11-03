@@ -1,10 +1,12 @@
 package bolt
 
 import (
+	"bytes"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
+	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
@@ -52,6 +54,74 @@ func (s *boltStmt) exec(args map[string]interface{}) error {
 
 type sqlStmt struct {
 	*boltStmt
+
+	conv genericConv
+}
+
+// genericConv implements driver.ValueConverter to allow the sql.DB interface
+// to work with bolt.
+type genericConv struct {
+	b     *bytes.Buffer
+	e     *encoding.Encoder
+	ismap bool
+	idx   int
+}
+
+// encode returns an encoded v and any errors that may have occurred.
+func (g *genericConv) encode(v interface{}) ([]byte, error) {
+	if g.b == nil {
+		g.b = new(bytes.Buffer)
+	}
+	if g.e == nil {
+		g.e = encoding.NewEncoder(g.b)
+	}
+	err := g.e.Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	m := make([]byte, g.b.Len())
+	copy(m, g.b.Bytes())
+	g.b.Reset()
+	return m, nil
+}
+
+// ConvertValue implements driver.ValueConverter.
+func (g *genericConv) ConvertValue(v interface{}) (driver.Value, error) {
+	if g.idx == 0 {
+		m, ok := v.(map[string]interface{})
+		if ok {
+			g.ismap = true
+			return g.encode(m)
+		}
+	}
+	// If our first value was a map then we've finished and any new values are
+	// an error.
+	if g.ismap {
+		return nil, errors.New("if value #0 is map[string]interface{} no other values are allowed")
+	}
+	// Even entries should be strings (keys).
+	if g.idx%2 == 0 {
+		key, ok := v.(string)
+		if !ok {
+			return nil, errors.New("even values must be string keys")
+		}
+		return key, nil
+	}
+	// Odd entries can be anything. The sql package handles the driver.Valuer
+	// case for us. If v is a valid driver.Value return it. Otherwise, use
+	// bolt's encoding and return it as a []byte.
+	//
+	// TODO: is there something more efficient?
+	if driver.IsValue(v) {
+		return v, nil
+	}
+	return g.encode(v)
+}
+
+// ColumnConverter implements driver.ColumnConverter.
+func (s *sqlStmt) ColumnConverter(idx int) driver.ValueConverter {
+	s.conv.idx = idx
+	return &s.conv
 }
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
@@ -79,7 +149,7 @@ func (s *boltStmt) Exec(params map[string]interface{}) (Result, error) {
 	}
 	success, ok := pull.(messages.SuccessMessage)
 	if !ok {
-		return nil, errors.New("Unrecognized response when discarding exec rows: %#v", pull)
+		return nil, fmt.Errorf("Unrecognized response when discarding exec rows: %#v", pull)
 	}
 	return boltResult{metadata: success.Metadata}, nil
 }

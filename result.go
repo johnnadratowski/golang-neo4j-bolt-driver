@@ -1,6 +1,9 @@
 package bolt
 
-import "github.com/SermoDigital/golang-neo4j-bolt-driver/errors"
+import (
+	"errors"
+	"fmt"
+)
 
 type boltResult struct {
 	metadata map[string]interface{}
@@ -29,7 +32,7 @@ func (r boltResult) RowsAffected() (int64, error) {
 
 	stats, ok := statsmd.(map[string]interface{})
 	if !ok {
-		return -1, errors.New("invalid type for metadata: %T", statsmd)
+		return -1, fmt.Errorf("invalid type for metadata: %T", statsmd)
 	}
 
 	var rowsAffected int64

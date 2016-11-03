@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/graph"
 )
 
@@ -1015,6 +1014,11 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 		t.Fatalf("Unexpected row closed output. Expected false. Got true")
 	}
 
+	err = rows.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = driver.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
@@ -1022,7 +1026,6 @@ func TestBoltStmt_SelectIntLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectStringLimits(t *testing.T) {
-
 	// Records session for testing
 	driver := newRecorder(t, "TestBoltStmt_SelectStringLimits", neo4jConnStr)
 
@@ -1042,6 +1045,7 @@ func TestBoltStmt_SelectStringLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
+	cols := columns(t, rows)
 
 	output := ifcs(4)
 	for rows.Next() {
@@ -1050,12 +1054,14 @@ func TestBoltStmt_SelectStringLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 	deref(output...)
+
 	if err := rows.Err(); err != nil {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	if !reflect.DeepEqual(columns(t, rows), []string{"a", "b", "c", "d"}) {
+	if !reflect.DeepEqual(cols, []string{"a", "b", "c", "d"}) {
 		t.Fatalf("Unexpected columns. %#v", columns(t, rows))
 	}
 
@@ -1076,6 +1082,11 @@ func TestBoltStmt_SelectStringLimits(t *testing.T) {
 		t.Fatalf("Unexpected row output, wanted false got true")
 	}
 
+	err = rows.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = driver.Close()
 	if err != nil {
 		t.Fatalf("Error closing connection: %s", err)
@@ -1083,7 +1094,6 @@ func TestBoltStmt_SelectStringLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectSliceLimits(t *testing.T) {
-
 	// Records session for testing
 	driver := newRecorder(t, "TestBoltStmt_SelectSliceLimits", neo4jConnStr)
 
@@ -1109,6 +1119,7 @@ func TestBoltStmt_SelectSliceLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
+	cols := columns(t, rows)
 
 	output := ifcs(4)
 	for rows.Next() {
@@ -1117,12 +1128,14 @@ func TestBoltStmt_SelectSliceLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 	deref(output...)
+
 	if err := rows.Err(); err != nil {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	if !reflect.DeepEqual(columns(t, rows), []string{"a", "b", "c", "d"}) {
+	if !reflect.DeepEqual(cols, []string{"a", "b", "c", "d"}) {
 		t.Fatalf("Unexpected columns. %#v", columns(t, rows))
 	}
 
@@ -1150,7 +1163,6 @@ func TestBoltStmt_SelectSliceLimits(t *testing.T) {
 }
 
 func TestBoltStmt_SelectMapLimits(t *testing.T) {
-
 	// Records session for testing
 	driver := newRecorder(t, "TestBoltStmt_SelectMapLimits", neo4jConnStr)
 
@@ -1187,6 +1199,7 @@ func TestBoltStmt_SelectMapLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
+	cols := columns(t, rows)
 
 	output := ifcs(4)
 	for rows.Next() {
@@ -1195,12 +1208,14 @@ func TestBoltStmt_SelectMapLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 	deref(output...)
+
 	if err := rows.Err(); err != nil {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	if !reflect.DeepEqual(columns(t, rows), []string{"a", "b", "c", "d"}) {
+	if !reflect.DeepEqual(cols, []string{"a", "b", "c", "d"}) {
 		t.Fatalf("Unexpected columns. %#v", columns(t, rows))
 	}
 
@@ -1228,7 +1243,6 @@ func TestBoltStmt_SelectMapLimits(t *testing.T) {
 }
 
 func TestBoltStmt_ManyChunks(t *testing.T) {
-
 	// Records session for testing
 	driver := newRecorder(t, "TestBoltStmt_ManyChunks", neo4jConnStr)
 
@@ -1243,6 +1257,7 @@ func TestBoltStmt_ManyChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("An error occurred querying Neo: %s", err)
 	}
+	cols := columns(t, rows)
 
 	output := ifcs(3)
 	for rows.Next() {
@@ -1256,7 +1271,7 @@ func TestBoltStmt_ManyChunks(t *testing.T) {
 		t.Fatalf("An error occurred getting next row: %s", err)
 	}
 
-	if !reflect.DeepEqual(columns(t, rows), []string{"a", "b", "c"}) {
+	if !reflect.DeepEqual(cols, []string{"a", "b", "c"}) {
 		t.Fatalf("Unexpected columns. %#v", columns(t, rows))
 	}
 
@@ -1285,7 +1300,7 @@ func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 		t.Skip("Cannot run this test when in recording mode")
 	}
 
-	db, err := sql.Open("neo4j-bolt", neo4jConnStr)
+	db, err := sql.Open("bolt", neo4jConnStr)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -1299,28 +1314,24 @@ func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 		"e": true,
 		"f": nil,
 	}
-	arg, err := encoding.Marshal(args)
-	if err != nil {
-		t.Fatalf("An error occurred marshalling args: %s", err)
-	}
 
 	stmt, err := db.Prepare(`CREATE path=(f:FOO {a: {a}, b: {b}, c: {c}, d: {d}, e: {e}, f: {f}})-[b:BAR]->(c:BAZ) RETURN f.a, f.b, f.c, f.d, f.e, f.f, f, b, path`)
 	if err != nil {
 		t.Fatalf("An error occurred preparing statement: %s", err)
 	}
-	rows, err := stmt.Query(arg)
+	rows, err := stmt.Query(args)
 	if err != nil {
 		t.Fatalf("An error occurred querying statement: %s", err)
 	}
 	var a int
 	var b float64
 	var c string
-	var d []byte
+	var d []interface{}
 	var e bool
 	var f interface{}
-	var node []byte
-	var rel []byte
-	var path []byte
+	var node graph.Node
+	var rel graph.Relationship
+	var path graph.Path
 	if !rows.Next() {
 		t.Fatalf("Rows.Next failed")
 	}
@@ -1340,12 +1351,8 @@ func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 		t.Fatalf("Unexpected value for c. Expected: %#v  Got: %#v", "string", b)
 	}
 
-	dVal, err := encoding.Unmarshal(d)
-	if err != nil {
-		t.Fatalf("Error occurred decoding item: %s", err)
-	}
-	if !reflect.DeepEqual(dVal.([]interface{}), []interface{}{int64(1), int64(2), int64(3)}) {
-		t.Fatalf("Unexpected value for d. Expected: %#v  Got: %#v", []interface{}{1, 2, 3}, dVal)
+	if !reflect.DeepEqual(d, []interface{}{int64(1), int64(2), int64(3)}) {
+		t.Fatalf("Unexpected value for d. Expected: %#v  Got: %#v", []interface{}{1, 2, 3}, d)
 	}
 
 	if !e {
@@ -1356,40 +1363,28 @@ func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 		t.Fatalf("Unexpected value for f. Expected: %#v  Got: %#v", nil, f)
 	}
 
-	nodeVal, err := encoding.Unmarshal(node)
-	if err != nil {
-		t.Fatalf("Error occurred decoding node: %s", err)
+	if node.Labels[0] != "FOO" {
+		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", node)
 	}
-	if nodeVal.(graph.Node).Labels[0] != "FOO" {
-		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", nodeVal)
-	}
-	if nodeVal.(graph.Node).Properties["a"] != int64(1) {
-		t.Fatalf("Unexpected value for node. Expected: %#v  Got: %#v", int64(1), nodeVal)
+	if node.Properties["a"] != int64(1) {
+		t.Fatalf("Unexpected value for node. Expected: %#v  Got: %#v", int64(1), node)
 	}
 
-	relVal, err := encoding.Unmarshal(rel)
-	if err != nil {
-		t.Fatalf("Error occurred decoding rel: %s", err)
-	}
-	if relVal.(graph.Relationship).Type != "BAR" {
-		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", relVal)
+	if rel.Type != "BAR" {
+		t.Fatalf("Unexpected label for node. Expected: %#v  Got: %#v", "FOO", rel)
 	}
 
-	pathVal, err := encoding.Unmarshal(path)
-	if err != nil {
-		t.Fatalf("Error occurred decoding path: %s", err)
+	if path.Nodes[0].Labels[0] != "FOO" {
+		t.Fatalf("Unexpected label for path node 0. Expected: %#v  Got: %#v", "FOO", path)
 	}
-	if pathVal.(graph.Path).Nodes[0].Labels[0] != "FOO" {
-		t.Fatalf("Unexpected label for path node 0. Expected: %#v  Got: %#v", "FOO", pathVal)
+	if path.Nodes[1].Labels[0] != "BAZ" {
+		t.Fatalf("Unexpected label for path node 1. Expected: %#v  Got: %#v", "BAZ", path)
 	}
-	if pathVal.(graph.Path).Nodes[1].Labels[0] != "BAZ" {
-		t.Fatalf("Unexpected label for path node 1. Expected: %#v  Got: %#v", "BAZ", pathVal)
+	if path.Relationships[0].Type != "BAR" {
+		t.Fatalf("Unexpected label for path relationship 1. Expected: %#v  Got: %#v", "BAR", path)
 	}
-	if pathVal.(graph.Path).Relationships[0].Type != "BAR" {
-		t.Fatalf("Unexpected label for path relationship 1. Expected: %#v  Got: %#v", "BAR", pathVal)
-	}
-	if pathVal.(graph.Path).Sequence[0] != 1 {
-		t.Fatalf("Unexpected label for path sequence 0. Expected: %#v  Got: %#v", 1, pathVal)
+	if path.Sequence[0] != 1 {
+		t.Fatalf("Unexpected label for path sequence 0. Expected: %#v  Got: %#v", 1, path)
 	}
 
 	err = stmt.Close()
@@ -1398,6 +1393,9 @@ func TestBoltStmt_SqlQueryAndExec(t *testing.T) {
 	}
 
 	stmt, err = db.Prepare(`MATCH (f:FOO)-[b:BAR]->(c:BAZ) DELETE f, b, c`)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := stmt.Exec()
 	if err != nil {

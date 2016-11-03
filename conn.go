@@ -2,26 +2,23 @@ package bolt
 
 import (
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"time"
 
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/encoding"
-	"github.com/SermoDigital/golang-neo4j-bolt-driver/log"
 	"github.com/SermoDigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
-const DefaultChunkSize = math.MaxUint16
+func errBadResp(action string, v interface{}) error {
+	return fmt.Errorf("unrecognized response while %s: %#v", action, v)
+}
 
 // Conn represents a connection to Neo4J implementing a Neo-friendly interface.
 // Some of the features of this interface implement Neo-specific features
-// unavailable in the sql/driver compatible interface
-//
-// Conn objects, and any prepared statements/transactions within are not
-// thread safe. If you want to use multipe go routines with these objects you
-// should use a driver to create a new conn for each routine.
+// unavailable in the sql/driver compatible interface.
 type Conn interface {
 	// Prepare prepares a neo4j specific statement.
 	Prepare(query string) (stmt, error)
@@ -50,9 +47,9 @@ type Conn interface {
 type status uint8
 
 const (
-	idle status = iota
-	transaction
-	statement
+	statusIdle    status = iota // idle
+	statusInTx                  // in a transaction
+	statusInBadTx               // in a bad transaction
 )
 
 type conn struct {
@@ -83,17 +80,13 @@ func (c *conn) encode(v interface{}) error {
 	return c.enc.Encode(v)
 }
 
-type boltConn struct {
-	*conn
-}
-
 func newConn(netcn net.Conn, v values) (*conn, error) {
 	timeout, err := parseTimeout(v.get("timeout"))
 	if err != nil {
 		return nil, err
 	}
 
-	c := &conn{conn: netcn, timeout: timeout, size: DefaultChunkSize}
+	c := &conn{conn: netcn, timeout: timeout, size: encoding.DefaultChunkSize}
 	if err := c.handShake(); err != nil {
 		if e := c.Close(); e != nil {
 			return nil, e
@@ -130,12 +123,12 @@ func (c *conn) handShake() error {
 		return err
 	}
 	if vers == noVersionSupported {
-		return fmt.Errorf("Server responded with no supported version")
+		return fmt.Errorf("server responded with no supported version")
 	}
 	return nil
 }
 
-// Read reads the data from the underlying connection
+// Read implements io.Reader with conn's timeout.
 func (c *conn) Read(b []byte) (n int, err error) {
 	err = c.conn.SetReadDeadline(time.Now().Add(c.timeout))
 	if err != nil {
@@ -144,7 +137,7 @@ func (c *conn) Read(b []byte) (n int, err error) {
 	return c.conn.Read(b)
 }
 
-// Write writes the data to the underlying connection
+// Write implements io.Writer with conn's timeout.
 func (c *conn) Write(b []byte) (n int, err error) {
 	err = c.conn.SetWriteDeadline(time.Now().Add(c.timeout))
 	if err != nil {
@@ -153,8 +146,7 @@ func (c *conn) Write(b []byte) (n int, err error) {
 	return c.conn.Write(b)
 }
 
-// Close closes the connection
-// Driver may allow for pooling in the future, keeping connections alive
+// Close closes the connection.
 func (c *conn) Close() error {
 	if c.bad {
 		return driver.ErrBadConn
@@ -168,72 +160,53 @@ func (c *conn) ackFailure(failure messages.FailureMessage) error {
 	ack := messages.NewAckFailureMessage()
 	err := c.encode(ack)
 	if err != nil {
-		return fmt.Errorf("An error occurred encoding ack failure message")
+		return err
 	}
 
 	for {
 		resp, err := c.decode()
 		if err != nil {
-			return fmt.Errorf("An error occurred decoding ack failure message response")
+			return err
 		}
 
 		switch resp := resp.(type) {
 		case messages.IgnoredMessage:
-			log.Infof("Got ignored message when acking failure: %#v", resp)
-			continue
+			// OK
 		case messages.SuccessMessage:
-			log.Infof("Got success message when acking failure: %#v", resp)
 			return nil
 		case messages.FailureMessage:
-			log.Errorf("Got failure message when acking failure: %#v", resp)
 			return c.reset()
 		default:
-			log.Errorf("Got unrecognized response from acking failure: %#v", resp)
-			err := c.Close()
-			if err != nil {
-				log.Errorf("An error occurred closing the session: %s", err)
-			}
-			return fmt.Errorf("Got unrecognized response from acking failure: %#v. CLOSING SESSION!", resp)
+			c.Close()
+			return fmt.Errorf("got unrecognized response from acking failure: %#v ", resp)
 		}
 	}
 }
 
 func (c *conn) reset() error {
-	log.Info("Resetting session")
-
 	reset := messages.NewResetMessage()
 	err := c.encode(reset)
 	if err != nil {
-		return fmt.Errorf("An error occurred encoding reset message")
+		return err
 	}
 
 	for {
 		resp, err := c.decode()
 		if err != nil {
-			return fmt.Errorf("An error occurred decoding reset message response")
+			return err
 		}
 
 		switch resp := resp.(type) {
 		case messages.IgnoredMessage:
-			log.Infof("Got ignored message when resetting session: %#v", resp)
-			continue
+			// OK
 		case messages.SuccessMessage:
-			log.Infof("Got success message when resetting session: %#v", resp)
 			return nil
 		case messages.FailureMessage:
-			log.Errorf("Got failure message when resetting session: %#v", resp)
-			err = c.Close()
-			if err != nil {
-				log.Errorf("An error occurred closing the session: %s", err)
-			}
-			return fmt.Errorf("Error resetting session: %#v. CLOSING SESSION!", resp)
+			c.Close()
+			return fmt.Errorf("error resetting session: %#v ", resp)
 		default:
-			log.Errorf("Got unrecognized response from resetting session: %#v", resp)
-			err = c.Close()
-			if err != nil {
-				log.Errorf("An error occurred closing the session: %s", err)
-			}
-			return fmt.Errorf("Got unrecognized response from resetting session: %#v. CLOSING SESSION!", resp)
+			c.Close()
+			return fmt.Errorf("got unrecognized response from resetting session: %#v ", resp)
 		}
 	}
 }
@@ -245,7 +218,7 @@ func (c *conn) Prepare(query string) (stmt, error) {
 
 func (c *conn) prepare(query string) (*boltStmt, error) {
 	if c.bad {
-		return nil, ErrClosed
+		return nil, driver.ErrBadConn
 	}
 	return &boltStmt{conn: c, query: query}, nil
 }
@@ -253,29 +226,72 @@ func (c *conn) prepare(query string) (*boltStmt, error) {
 // Begin begins a new transaction with the Neo4J Database
 func (c *conn) Begin() (driver.Tx, error) {
 	if c.bad {
-		return nil, ErrClosed
+		return nil, driver.ErrBadConn
 	}
 
-	successInt, pullInt, err := c.sendRunPullAllConsumeSingle("BEGIN", nil)
+	sifc, pifc, err := c.sendRunPullAllConsumeSingle("BEGIN", nil)
 	if err != nil {
-		return nil, fmt.Errorf("An error occurred beginning transaction")
+		return nil, err
 	}
 
-	success, ok := successInt.(messages.SuccessMessage)
+	success, ok := sifc.(messages.SuccessMessage)
 	if !ok {
-		return nil, fmt.Errorf("Unrecognized response type beginning transaction: %#v", success)
+		return nil, errBadResp("beginning transaction", success)
 	}
 
-	log.Infof("Got success message beginning transaction: %#v", success)
-
-	success, ok = pullInt.(messages.SuccessMessage)
+	success, ok = pifc.(messages.SuccessMessage)
 	if !ok {
-		return nil, fmt.Errorf("Unrecognized response type pulling transaction:  %#v", success)
+		return nil, errBadResp("pulling transaction", success)
+	}
+	return c, nil
+}
+
+// Commit commits and closes the transaction
+func (c *conn) Commit() error {
+	if c.bad {
+		return driver.ErrBadConn
 	}
 
-	log.Infof("Got success message pulling transaction: %#v", success)
+	sifc, pifc, err := c.sendRunPullAllConsumeSingle("COMMIT", nil)
+	if err != nil {
+		return err
+	}
 
-	return newTx(c), nil
+	success, ok := sifc.(messages.SuccessMessage)
+	if !ok {
+		return errBadResp("committing transaction", success)
+	}
+
+	pull, ok := pifc.(messages.SuccessMessage)
+	if !ok {
+		return errBadResp("pulling transaction", pull)
+	}
+	return err
+}
+
+// Rollback rolls back and closes the transaction
+func (c *conn) Rollback() error {
+	if c.bad {
+		return errors.New("transaction already closed")
+	}
+
+	sifc, pifc, err := c.sendRunPullAllConsumeSingle("ROLLBACK", nil)
+	if err != nil {
+		return err
+	}
+
+	success, ok := sifc.(messages.SuccessMessage)
+	if !ok {
+		return errBadResp("rolling back transaction", success)
+	}
+
+	pull, ok := pifc.(messages.SuccessMessage)
+	if !ok {
+		return errBadResp("pulling transaction", pull)
+	}
+
+	c.bad = true
+	return err
 }
 
 // Sets the size of the chunks to write to the stream
@@ -286,6 +302,18 @@ func (c *conn) SetChunkSize(chunkSize uint16) {
 // Sets the timeout for reading and writing to the stream
 func (c *conn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
+}
+
+func (c *conn) query(query string, args map[string]interface{}) (*boltRows, error) {
+	if c.bad {
+		return nil, driver.ErrBadConn
+	}
+	stmt := &boltStmt{conn: c, query: query}
+	err := stmt.exec(args)
+	if err != nil {
+		return nil, err
+	}
+	return &boltRows{conn: c, md: stmt.md}, nil
 }
 
 func (c *conn) consume() (interface{}, error) {
@@ -319,21 +347,16 @@ func (c *conn) consumeAll() ([]interface{}, interface{}, error) {
 }
 
 func (c *conn) consumeAllMultiple(mult int) ([][]interface{}, []interface{}, error) {
-	log.Info("Consuming all responses %d times until success/failure", mult)
-
 	responses := make([][]interface{}, mult)
 	successes := make([]interface{}, mult)
 	for i := 0; i < mult; i++ {
-
 		resp, success, err := c.consumeAll()
 		if err != nil {
 			return responses, successes, err
 		}
-
 		responses[i] = resp
 		successes[i] = success
 	}
-
 	return responses, successes, nil
 }
 
@@ -443,18 +466,4 @@ func (c *conn) sendRunDiscardAllConsume(query string, args map[string]interface{
 	}
 	discardResp, err := c.sendDiscardAllConsume()
 	return runResp, discardResp, err
-}
-
-var ErrClosed = fmt.Errorf("connection already closed")
-
-func (c *conn) query(query string, args map[string]interface{}) (*boltRows, error) {
-	if c.bad {
-		return nil, driver.ErrBadConn
-	}
-	stmt := &boltStmt{conn: c, query: query}
-	err := stmt.exec(args)
-	if err != nil {
-		return nil, err
-	}
-	return &boltRows{conn: c, md: stmt.md}, nil
 }

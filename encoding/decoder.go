@@ -202,21 +202,21 @@ func (d *Decoder) decode() (interface{}, error) {
 			return d.decodeString(int(marker) - TinyStringMarker)
 		}
 	case String8Marker:
-		var out int8
+		var out uint8
 		err := d.read(&out)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeString(int(out))
 	case String16Marker:
-		var out int16
+		var out uint16
 		err := d.read(&out)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeString(int(out))
 	case String32Marker:
-		var out int32
+		var out uint32
 		err := d.read(&out)
 		if err != nil {
 			return nil, err
@@ -231,21 +231,21 @@ func (d *Decoder) decode() (interface{}, error) {
 			return d.decodeSlice(int(marker) - TinySliceMarker)
 		}
 	case Slice8Marker:
-		var size int8
+		var size uint8
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeSlice(int(size))
 	case Slice16Marker:
-		var size int16
+		var size uint16
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeSlice(int(size))
 	case Slice32Marker:
-		var size int32
+		var size uint32
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
@@ -260,21 +260,21 @@ func (d *Decoder) decode() (interface{}, error) {
 			return d.decodeMap(int(marker) - TinyMapMarker)
 		}
 	case Map8Marker:
-		var size int8
+		var size uint8
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeMap(int(size))
 	case Map16Marker:
-		var size int16
+		var size uint16
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeMap(int(size))
 	case Map32Marker:
-		var size int32
+		var size uint32
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
@@ -289,14 +289,14 @@ func (d *Decoder) decode() (interface{}, error) {
 			return d.decodeStruct()
 		}
 	case Struct8Marker:
-		var size int8
+		var size uint8
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
 		}
 		return d.decodeStruct()
 	case Struct16Marker:
-		var size int16
+		var size uint16
 		err := d.read(&size)
 		if err != nil {
 			return nil, err
