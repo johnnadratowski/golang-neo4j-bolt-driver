@@ -70,7 +70,7 @@ func (d *boltDriver) OpenNeo(connStr string) (Conn, error) {
 type DriverPool interface {
 	// OpenPool opens a Neo-specific connection.
 	OpenPool() (Conn, error)
-	reclaim(*boltConn)
+	reclaim(*boltConn) error
 }
 
 type boltDriverPool struct {
@@ -110,13 +110,25 @@ func (d *boltDriverPool) OpenPool() (Conn, error) {
 	return conn, nil
 }
 
-func (d *boltDriverPool) reclaim(conn *boltConn) {
-	// sneakily swap out connection so a reference to
-	// it isn't held on to
-	newConn := &boltConn{}
-	*newConn = *conn
+func (d *boltDriverPool) reclaim(conn *boltConn) error {
+	var newConn *boltConn
+	var err error
+	if conn.connErr != nil || conn.closed {
+		newConn, err = newPooledBoltConn(d.connStr, d)
+		if err != nil {
+			return err
+		}
+	} else {
+		// sneakily swap out connection so a reference to
+		// it isn't held on to
+		newConn = &boltConn{}
+		*newConn = *conn
+	}
+
 	d.pool <- newConn
 	conn = nil
+
+	return nil
 }
 
 func init() {

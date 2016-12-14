@@ -6,8 +6,9 @@ import (
 
 	"time"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 	"sync"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 )
 
 var (
@@ -234,4 +235,52 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestBoltDriverPool_ReclaimBadConn(t *testing.T) {
+	if neo4jConnStr == "" {
+		t.Skip("Cannot run this test when in recording mode")
+	}
+
+	driver, err := NewDriverPool(neo4jConnStr, 1)
+	if err != nil {
+		t.Fatalf("An error occurred opening driver pool: %#v", err)
+	}
+
+	conn, err := driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
+	if err != nil {
+		t.Fatalf("An error occurred creating f neo: %s", err)
+	}
+
+	err = conn.(*boltConn).conn.Close()
+	if err != nil {
+		t.Fatalf("An error occurred closing underlying connection: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
+	if err == nil {
+		t.Fatal("An error should have occurred when trying to make a call with a closed connection")
+	} else if conn.(*boltConn).connErr == nil {
+		t.Fatal("A connection error should have been associated to the conn after a bad connection")
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Got an error closing a bad connection: %s", err)
+	}
+
+	conn, err = driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
+	if err != nil {
+		t.Fatalf("A new conn should have been established for an old conn that had an error. However, we got an error: %s", err)
+	}
 }
