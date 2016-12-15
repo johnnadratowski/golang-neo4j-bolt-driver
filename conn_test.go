@@ -1,9 +1,13 @@
 package golangNeo4jBoltDriver
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
+	"time"
+
+	blog "github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 )
 
 func TestBoltConn_parseURL(t *testing.T) {
@@ -237,4 +241,63 @@ func TestBoltConn_IgnoredPipeline(t *testing.T) {
 	if data[0][0].(int64) != 1 {
 		t.Fatalf("Expected different data from output: %#v", data)
 	}
+}
+
+func TestBoltConn_ExecPipeline(t *testing.T) {
+	blog.SetLevel("")
+	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_IgnoredPipeline", neo4jConnStr)
+
+	conn, _ := driver.OpenNeo(neo4jConnStr)
+	d, _ := time.ParseDuration("5s")
+	conn.SetTimeout(d)
+	defer conn.Close()
+	start := time.Now()
+
+	query := "MERGE (c:Contact {id: {id}}) SET c.www = {www}, c.full_name = {full_name} " +
+		"WITH c " +
+		"OPTIONAL MATCH (m)-[existing:MANAGER]->(c) " +
+		"DELETE m, existing " +
+		"MERGE (c)<-[:MANAGER]-(:Manager { manager: {a} }) " +
+		"MERGE (c)<-[:MANAGER]-(:Manager { manager: {b} }) " +
+		"MERGE (c)<-[:MANAGER]-(:Manager { manager: {c} })"
+
+	var queries []string
+	var queryParams []map[string]interface{}
+
+	loopLimit := 8000
+	i := 0
+	for {
+		queryParam := make(map[string]interface{})
+		queryParam["id"] = "nothing unique here"
+		queryParam["www"] = "http://www.kylehq.com"
+		queryParam["full_name"] = "Kyle Clarke name drop yo!"
+		queryParam["a"] = "foo"
+		queryParam["b"] = "bar"
+		queryParam["c"] = "baz"
+		queryParams = append(queryParams, queryParam)
+		queries = append(queries, query)
+
+		i++
+		if i > loopLimit {
+			break
+		}
+	}
+
+	pipeline, err := conn.PreparePipeline(queries...)
+	if err != nil {
+		t.Fatalf("Got an error on prepare pipeline query: %#v", err)
+	}
+
+	_, err = pipeline.ExecPipeline(queryParams...)
+	if err != nil {
+		t.Fatalf("Got error on Exec pipeline: %#v", err)
+	}
+
+	fmt.Println(fmt.Sprintf("Pipeline took %f seconds to complete for %d iterations. Is this acceptable?", time.Since(start).Seconds(), loopLimit))
+
+	// Clean up
+	pipeline.Close()
 }
