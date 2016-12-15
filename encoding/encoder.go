@@ -191,7 +191,7 @@ func (e Encoder) encode(iVal interface{}) error {
 		err = e.encodeInt(int64(val))
 	case uint64:
 		if val > math.MaxInt64 {
-			return errors.New("Integer too big: %d. Max integer supported: %d", val, math.MaxInt64)
+			return errors.New("Integer too big: %d. Max integer supported: %d", val, int64(math.MaxInt64))
 		}
 		err = e.encodeInt(int64(val))
 	case float32:
@@ -325,7 +325,7 @@ func (e Encoder) encodeString(val string) error {
 			return err
 		}
 		_, err = e.Write(bytes)
-	case length > math.MaxUint16 && length <= math.MaxUint32:
+	case length > math.MaxUint16 && int64(length) <= math.MaxUint32:
 		if _, err = e.Write([]byte{String32Marker}); err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func (e Encoder) encodeSlice(val []interface{}) error {
 		if err := binary.Write(e, binary.BigEndian, int16(length)); err != nil {
 			return err
 		}
-	case length >= math.MaxUint16 && length <= math.MaxUint32:
+	case length >= math.MaxUint16 && int64(length) <= math.MaxUint32:
 		if _, err := e.Write([]byte{Slice32Marker}); err != nil {
 			return err
 		}
@@ -402,7 +402,7 @@ func (e Encoder) encodeMap(val map[string]interface{}) error {
 		if err := binary.Write(e, binary.BigEndian, int16(length)); err != nil {
 			return err
 		}
-	case length >= math.MaxUint16 && length <= math.MaxUint32:
+	case length >= math.MaxUint16 && int64(length) <= math.MaxUint32:
 		if _, err := e.Write([]byte{Map32Marker}); err != nil {
 			return err
 		}
