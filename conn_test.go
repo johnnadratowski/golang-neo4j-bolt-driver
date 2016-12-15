@@ -248,6 +248,7 @@ func TestBoltConn_FailureMessageError(t *testing.T) {
 	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_FailureMessageError", neo4jConnStr)
 
 	conn, err := driver.OpenNeo(neo4jConnStr)
+	defer conn.Close()
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
