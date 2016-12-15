@@ -68,6 +68,7 @@ type boltConn struct {
 	user          string
 	password      string
 	conn          net.Conn
+	connErr       error
 	serverVersion []byte
 	timeout       time.Duration
 	chunkSize     uint16
@@ -301,17 +302,17 @@ func (c *boltConn) initialize() error {
 		return nil
 	default:
 		log.Errorf("Got an unrecognized message when initializing connection :%+v", resp)
-		if e := c.Close(); e != nil {
-			log.Errorf("An error occurred closing connection: %s", e)
-		}
-		return errors.New("Unrecognized response from the server: %#v", resp)
+		c.connErr = errors.New("Unrecognized response from the server: %#v", resp)
+		c.Close()
+		return driver.ErrBadConn
 	}
 }
 
 // Read reads the data from the underlying connection
 func (c *boltConn) Read(b []byte) (n int, err error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, errors.Wrap(err, "An error occurred setting read deadline")
+		c.connErr = errors.Wrap(err, "An error occurred setting read deadline")
+		return 0, driver.ErrBadConn
 	}
 
 	n, err = c.conn.Read(b)
@@ -321,7 +322,8 @@ func (c *boltConn) Read(b []byte) (n int, err error) {
 	}
 
 	if err != nil && err != io.EOF {
-		err = errors.Wrap(err, "An error occurred reading from stream")
+		c.connErr = errors.Wrap(err, "An error occurred reading from stream")
+		err = driver.ErrBadConn
 	}
 	return n, err
 }
@@ -329,7 +331,8 @@ func (c *boltConn) Read(b []byte) (n int, err error) {
 // Write writes the data to the underlying connection
 func (c *boltConn) Write(b []byte) (n int, err error) {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
-		return 0, errors.Wrap(err, "An error occurred setting write deadline")
+		c.connErr = errors.Wrap(err, "An error occurred setting write deadline")
+		return 0, driver.ErrBadConn
 	}
 
 	n, err = c.conn.Write(b)
@@ -339,7 +342,8 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 	}
 
 	if err != nil {
-		err = errors.Wrap(err, "An error occurred writing to stream")
+		c.connErr = errors.Wrap(err, "An error occurred writing to stream")
+		err = driver.ErrBadConn
 	}
 	return n, err
 }
@@ -372,14 +376,20 @@ func (c *boltConn) Close() error {
 
 	if c.poolDriver != nil {
 		// If using connection pooling, don't close connection, just reclaim it
-		c.poolDriver.reclaim(c)
+		err := c.poolDriver.reclaim(c)
+		if err != nil {
+			log.Errorf("An error occurred reclaiming connection for pool: %s", err)
+			c.connErr = errors.Wrap(err, "An error occurred closing the connection")
+			return driver.ErrBadConn
+		}
 		return nil
 	}
 
 	err := c.conn.Close()
 	c.closed = true
 	if err != nil {
-		return errors.Wrap(err, "An error occurred closing the connection")
+		c.connErr = errors.Wrap(err, "An error occurred closing the connection")
+		return driver.ErrBadConn
 	}
 
 	return nil
@@ -412,11 +422,9 @@ func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
 			return c.reset()
 		default:
 			log.Errorf("Got unrecognized response from acking failure: %#v", resp)
-			err := c.Close()
-			if err != nil {
-				log.Errorf("An error occurred closing the session: %s", err)
-			}
-			return errors.New("Got unrecognized response from acking failure: %#v. CLOSING SESSION!", resp)
+			c.connErr = errors.New("Got unrecognized response from acking failure: %#v. CLOSING SESSION!", resp)
+			c.Close()
+			return driver.ErrBadConn
 		}
 	}
 }
@@ -452,11 +460,9 @@ func (c *boltConn) reset() error {
 			return errors.New("Error resetting session: %#v. CLOSING SESSION!", resp)
 		default:
 			log.Errorf("Got unrecognized response from resetting session: %#v", resp)
-			err = c.Close()
-			if err != nil {
-				log.Errorf("An error occurred closing the session: %s", err)
-			}
-			return errors.New("Got unrecognized response from resetting session: %#v. CLOSING SESSION!", resp)
+			c.connErr = errors.New("Got unrecognized response from resetting session: %#v. CLOSING SESSION!", resp)
+			c.Close()
+			return driver.ErrBadConn
 		}
 	}
 }
