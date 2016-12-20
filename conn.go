@@ -457,7 +457,7 @@ func (c *boltConn) reset() error {
 			if err != nil {
 				log.Errorf("An error occurred closing the session: %s", err)
 			}
-			return errors.New("Error resetting session: %#v. CLOSING SESSION!", resp)
+			return errors.Wrap(resp, "Error resetting session. CLOSING SESSION!")
 		default:
 			log.Errorf("Got unrecognized response from resetting session: %#v", resp)
 			c.connErr = errors.New("Got unrecognized response from resetting session: %#v. CLOSING SESSION!", resp)
@@ -562,7 +562,7 @@ func (c *boltConn) consume() (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		return failure, errors.New("Got failure message: %#v", failure)
+		return failure, errors.Wrap(failure, "Neo4J reported a failure for the query")
 	}
 
 	return respInt, err
