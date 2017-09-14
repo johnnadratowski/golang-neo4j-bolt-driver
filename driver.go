@@ -3,6 +3,8 @@ package golangNeo4jBoltDriver
 import (
 	"database/sql"
 	"database/sql/driver"
+	"sync"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 )
 
 var (
@@ -73,14 +75,33 @@ type DriverPool interface {
 	reclaim(*boltConn) error
 }
 
+// ClosableDriverPool like the DriverPool but a closable function
+type ClosableDriverPool interface {
+	OpenPool() (Conn, error)
+	reclaim(*boltConn) error
+	Close() error
+}
+
 type boltDriverPool struct {
 	connStr  string
 	maxConns int
 	pool     chan *boltConn
+	connRefs []*boltConn
+	refLock  sync.Mutex
+	closed   bool
 }
 
 // NewDriverPool creates a new Driver object with connection pooling
 func NewDriverPool(connStr string, max int) (DriverPool, error) {
+	return createDriverPool(connStr, max)
+}
+
+// NewClosableDriverPool create a closable driver pool
+func NewClosableDriverPool(connStr string, max int) (ClosableDriverPool, error) {
+	return createDriverPool(connStr, max)
+}
+
+func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
 	d := &boltDriverPool{
 		connStr:  connStr,
 		maxConns: max,
@@ -101,13 +122,38 @@ func NewDriverPool(connStr string, max int) (DriverPool, error) {
 
 // OpenNeo opens a new Bolt connection to the Neo4J database.
 func (d *boltDriverPool) OpenPool() (Conn, error) {
-	conn := <-d.pool
-	if conn.conn == nil {
-		if err := conn.initialize(); err != nil {
-			return nil, err
+	// For each connection request we need to block in case a the Close function is called. This gives us a guarantee
+	// when closing the pool no new connections are make.
+	d.refLock.Lock()
+	defer d.refLock.Unlock()
+	if !d.closed {
+		conn := <-d.pool
+		if conn.conn == nil {
+			if err := conn.initialize(); err != nil {
+				return nil, err
+			}
+			d.connRefs = append(d.connRefs, conn)
 		}
+		return conn, nil
+	} else {
+		return nil, errors.New("Driver pool has been closed")
 	}
-	return conn, nil
+}
+
+// Close all connections in the pool
+func (d *boltDriverPool) Close() error {
+	var err error
+	// Lock the connection ref so no new connections can be added
+	d.refLock.Lock()
+	defer d.refLock.Unlock()
+	for _, conn := range d.connRefs {
+		// Remove the reference to the pool to allow a clean up of the connection
+		conn.poolDriver = nil
+		err = conn.Close()
+	}
+	// Mark the pool as closed to stop any new connections
+	d.closed = true
+	return err
 }
 
 func (d *boltDriverPool) reclaim(conn *boltConn) error {
