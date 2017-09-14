@@ -75,7 +75,7 @@ type DriverPool interface {
 	reclaim(*boltConn) error
 }
 
-// ClosableDriverPool like the DriverPool but a closable function
+// ClosableDriverPool like the DriverPool but with a closable function
 type ClosableDriverPool interface {
 	OpenPool() (Conn, error)
 	reclaim(*boltConn) error
@@ -122,8 +122,8 @@ func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
 
 // OpenNeo opens a new Bolt connection to the Neo4J database.
 func (d *boltDriverPool) OpenPool() (Conn, error) {
-	// For each connection request we need to block in case a the Close function is called. This gives us a guarantee
-	// when closing the pool no new connections are make.
+	// For each connection request we need to block in case the Close function is called. This gives us a guarantee
+	// when closing the pool no new connections are made.
 	d.refLock.Lock()
 	defer d.refLock.Unlock()
 	if !d.closed {
@@ -147,7 +147,7 @@ func (d *boltDriverPool) Close() error {
 	d.refLock.Lock()
 	defer d.refLock.Unlock()
 	for _, conn := range d.connRefs {
-		// Remove the reference to the pool to allow a clean up of the connection
+		// Remove the reference to the pool, to allow a clean up of the connection
 		conn.poolDriver = nil
 		err = conn.Close()
 	}
