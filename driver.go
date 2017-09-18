@@ -77,8 +77,7 @@ type DriverPool interface {
 
 // ClosableDriverPool like the DriverPool but with a closable function
 type ClosableDriverPool interface {
-	OpenPool() (Conn, error)
-	reclaim(*boltConn) error
+	DriverPool
 	Close() error
 }
 
@@ -142,18 +141,21 @@ func (d *boltDriverPool) OpenPool() (Conn, error) {
 
 // Close all connections in the pool
 func (d *boltDriverPool) Close() error {
-	var err error
 	// Lock the connection ref so no new connections can be added
 	d.refLock.Lock()
 	defer d.refLock.Unlock()
 	for _, conn := range d.connRefs {
 		// Remove the reference to the pool, to allow a clean up of the connection
 		conn.poolDriver = nil
-		err = conn.Close()
+		err := conn.Close()
+		if err != nil {
+			d.closed = true
+			return err
+		}
 	}
 	// Mark the pool as closed to stop any new connections
 	d.closed = true
-	return err
+	return nil
 }
 
 func (d *boltDriverPool) reclaim(conn *boltConn) error {
