@@ -356,12 +356,6 @@ func (c *boltConn) Close() error {
 		return nil
 	}
 
-	if c.transaction != nil {
-		if err := c.transaction.Rollback(); err != nil {
-			return err
-		}
-	}
-
 	if c.statement != nil {
 		if err := c.statement.Close(); err != nil {
 			return err
