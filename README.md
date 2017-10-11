@@ -1,5 +1,6 @@
 # Golang Neo4J Bolt Driver
 [![Build Status](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver.svg?branch=master)](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver) *Tested against Golang 1.4.3 and up*
+[![GoDoc](https://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver?status.svg)](https://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver)
 
 
 Implements the Neo4J Bolt Protocol specification:
