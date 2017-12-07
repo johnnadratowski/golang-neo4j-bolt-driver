@@ -129,6 +129,8 @@ func (d *boltDriverPool) OpenPool() (Conn, error) {
 		conn := <-d.pool
 		if conn.conn == nil {
 			if err := conn.initialize(); err != nil {
+				// Return the connection back into the pool
+				d.pool <- conn
 				return nil, err
 			}
 			d.connRefs = append(d.connRefs, conn)
