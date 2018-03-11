@@ -29,7 +29,7 @@ go get github.com/johnnadratowski/golang-neo4j-bolt-driver
 ```go
 func quickNDirty() {
 	driver := bolt.NewDriver()
-	conn, _ := driver.OpenNeo("bolt://localhost:7687")
+	conn, _ := driver.OpenNeo("bolt://username:password@localhost:7687")
 	defer conn.Close()
 
 	// Start by creating a node
@@ -74,7 +74,7 @@ func quickNDirty() {
 
 // Constants to be used throughout the example
 const (
-	URI          = "bolt://localhost:7687"
+	URI          = "bolt://username:password@localhost:7687"
 	CreateNode   = "CREATE (n:NODE {foo: {foo}, bar: {bar}})"
 	GetNode      = "MATCH (n:NODE) RETURN n.foo, n.bar"
 	RelationNode = "MATCH path=(n:NODE)-[:REL]->(m) RETURN path"
