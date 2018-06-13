@@ -271,12 +271,20 @@ func (c *boltConn) initialize() error {
 	} else if c.driver != nil && c.driver.recorder != nil {
 		c.driver.recorder.Conn, err = c.createConn()
 		if err != nil {
+			// Return the connection back into the pool
+			if e := c.Close(); e != nil {
+				log.Errorf("An error occurred closing connection: %s", e)
+			}
 			return err
 		}
 		c.conn = c.driver.recorder
 	} else {
 		c.conn, err = c.createConn()
 		if err != nil {
+			// Return the connection back into the pool
+			if e := c.Close(); e != nil {
+				log.Errorf("An error occurred closing connection: %s", e)
+			}
 			return err
 		}
 	}
