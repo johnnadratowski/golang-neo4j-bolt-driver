@@ -590,7 +590,7 @@ func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
 }
 
 func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{}, error) {
-	log.Info("Consuming all responses %d times until success/failure", mult)
+	log.Infof("Consuming all responses %d times until success/failure", mult)
 
 	responses := make([][]interface{}, mult)
 	successes := make([]interface{}, mult)
