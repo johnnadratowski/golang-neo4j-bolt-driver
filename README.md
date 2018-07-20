@@ -264,6 +264,13 @@ In order to get CI, I made a recorder mechanism so you don't need to run neo4j a
 
 You need access to a running Neo4J database to develop for this project, so that you can run the tests to generate the recordings.
 
+## Supported Builds
+* Linux (1.4.x, 1.5.x, 1.6.x, 1.7.x, 1.8.x, 1.9.x and tip)
+* MacOs (1.7.x, 1.8.x, 1.9.x and tip)
+*_according to https://github.com/golang/go/issues/17824, go 1.6.4 (and anything prior does not support osx 10.12) which results in unpredicable behavior (sometimes it is okay, sometimes build hangs, and sometimes build fail due to segfault)_*
+
+
+
 ## TODO
 
 * Cypher Parser to implement NumInput and pre-flight checking
