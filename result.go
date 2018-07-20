@@ -39,6 +39,11 @@ func (r boltResult) LastInsertId() (int64, error) {
 // updated.  If this changes in the future, number updated will be added to the output of this
 // interface.
 func (r boltResult) RowsAffected() (int64, error) {
+	// metadata omits stats when rowsAffected == 0, check existence to prevent panic
+	if  _, ok := r.metadata["stats"]; !ok {
+		return 0, nil
+	}
+
 	stats, ok := r.metadata["stats"].(map[string]interface{})
 	if !ok {
 		return -1, errors.New("Unrecognized type for stats metadata: %#v", r.metadata)
