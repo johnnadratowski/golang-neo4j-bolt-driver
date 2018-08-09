@@ -44,6 +44,24 @@ func (e *Error) Error() string {
 	return e.error(0)
 }
 
+// Inner returns the inner error wrapped by this error
+func (e *Error) Inner() error {
+	return e.wrapped
+}
+
+// InnerMost returns the innermost error wrapped by this error
+func (e *Error) InnerMost() error {
+	if e.wrapped == nil {
+		return e
+	}
+
+	if inner, ok := e.wrapped.(*Error); ok {
+		return inner.InnerMost()
+	}
+
+	return e.wrapped
+}
+
 func (e *Error) error(level int) string {
 	msg := fmt.Sprintf("%s%s", strings.Repeat("\t", level), e.msg)
 	if e.wrapped != nil {

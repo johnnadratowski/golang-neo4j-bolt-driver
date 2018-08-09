@@ -1,5 +1,7 @@
 package messages
 
+import "fmt"
+
 const (
 	// FailureMessageSignature is the signature byte for the FAILURE message
 	FailureMessageSignature = 0x7F
@@ -25,4 +27,10 @@ func (i FailureMessage) Signature() int {
 // AllFields gets the fields to encode for the struct
 func (i FailureMessage) AllFields() []interface{} {
 	return []interface{}{i.Metadata}
+}
+
+// Error is the implementation of the Golang error interface so a failure message
+// can be treated like a normal error
+func (i FailureMessage) Error() string {
+	return fmt.Sprintf("%#v", i)
 }

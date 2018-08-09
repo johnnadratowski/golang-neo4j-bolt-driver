@@ -1,6 +1,8 @@
 package golangNeo4jBoltDriver
 
 import (
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 	"io"
 	"reflect"
 	"testing"
@@ -236,5 +238,28 @@ func TestBoltConn_IgnoredPipeline(t *testing.T) {
 
 	if data[0][0].(int64) != 1 {
 		t.Fatalf("Expected different data from output: %#v", data)
+	}
+}
+
+func TestBoltConn_FailureMessageError(t *testing.T) {
+	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_FailureMessageError", neo4jConnStr)
+
+	conn, err := driver.OpenNeo(neo4jConnStr)
+	defer conn.Close()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo("THIS IS A BAD QUERY AND SHOULD RETURN A FAILURE MESSAGE", nil)
+	if err == nil {
+		t.Fatal("This should have returned a failure message error, but got a nil error")
+	}
+
+	code := "Neo.ClientError.Statement.SyntaxError"
+	if err.(*errors.Error).InnerMost().(messages.FailureMessage).Metadata["code"] != code {
+		t.Fatalf("Expected error message code %s, but got %v", code, err.(*errors.Error).InnerMost().(messages.FailureMessage).Metadata["code"])
 	}
 }

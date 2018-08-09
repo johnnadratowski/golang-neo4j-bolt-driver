@@ -41,7 +41,7 @@ func (d Decoder) read() (*bytes.Buffer, error) {
 	output := &bytes.Buffer{}
 	for {
 		lengthBytes := make([]byte, 2)
-		if numRead, err := d.r.Read(lengthBytes); numRead != 2 {
+		if numRead, err := io.ReadFull(d.r, lengthBytes); numRead != 2 {
 			return nil, errors.Wrap(err, "Couldn't read expected bytes for message length. Read: %d Expected: 2.", numRead)
 		}
 

@@ -3,15 +3,29 @@ language: go
 sudo: false
 
 os:
-  - linux
-  - osx
-
+ - linux
 go:
-- 1.4.3
-- 1.5.4
-- 1.6.2
-- tip
+ - "1.4.3"
+ - "1.5.4"
+ - "1.6.4"
+ - "1.7.6"
+ - "1.8.4"
+ - "1.9.1"
+ - "tip"
 
+#exclude specific go versions in osx build because according to https://github.com/golang/go/issues/17824, go 1.6.4 (and anything prior does not support osx 10.12) which results in unpredicable behavior (sometimes pass, sometimes hangs, sometimes fail due to segfault)
+
+matrix:
+  include:
+    - os: osx
+      go: "1.7.6"
+    - os: osx
+      go: "1.8.4"
+    - os: osx
+      go: "1.9.1"
+    - os: osx
+      go: "tip"
+      
 #before_install:
 #- go get github.com/mattn/goveralls
 #- go get golang.org/x/tools/cmd/cover

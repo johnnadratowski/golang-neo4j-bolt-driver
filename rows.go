@@ -267,8 +267,7 @@ func (r *boltRows) NextPipeline() ([]interface{}, map[string]interface{}, Pipeli
 		}
 
 		successResp, err := r.statement.conn.consume()
-		if err == io.EOF {
-		} else if err != nil {
+		if err != nil && err != io.EOF {
 			return nil, nil, nil, errors.Wrap(err, "An error occurred getting next set of rows from pipeline command: %#v", successResp)
 		}
 
