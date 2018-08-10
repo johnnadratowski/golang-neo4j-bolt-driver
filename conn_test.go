@@ -1,11 +1,12 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 	"io"
 	"reflect"
 	"testing"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
 )
 
 func TestBoltConn_parseURL(t *testing.T) {
@@ -105,8 +106,18 @@ func TestBoltConn_SelectOne(t *testing.T) {
 	expectedMetadata := map[string]interface{}{
 		"fields": []interface{}{"1"},
 	}
-	if !reflect.DeepEqual(rows.Metadata(), expectedMetadata) {
+	resultingMetadata := make(map[string]interface{})
+
+	for key, value := range rows.Metadata() {
+		if key != "result_available_after" {
+			resultingMetadata[key] = value
+		}
+	}
+
+	if !reflect.DeepEqual(resultingMetadata, expectedMetadata) {
 		t.Fatalf("Unexpected success metadata. Expected %#v. Got: %#v", expectedMetadata, rows.Metadata())
+	} else if _, ok := rows.Metadata()["result_available_after"]; !ok {
+		t.Fatalf("Unexpected success metadata. Expected the key 'result_available_after'. Got: %#v", rows.Metadata())
 	}
 
 	output, _, err := rows.NextNeo()
@@ -119,11 +130,23 @@ func TestBoltConn_SelectOne(t *testing.T) {
 	}
 
 	_, metadata, err := rows.NextNeo()
-	expectedMetadata = map[string]interface{}{"type": "r"}
+	expectedMetadata = map[string]interface{}{
+		"type": "r",
+	}
+	resultingMetadata = make(map[string]interface{})
+
+	for key, value := range metadata {
+		if key != "result_consumed_after" {
+			resultingMetadata[key] = value
+		}
+	}
+
 	if err != io.EOF {
 		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
-	} else if !reflect.DeepEqual(metadata, expectedMetadata) {
+	} else if !reflect.DeepEqual(resultingMetadata, expectedMetadata) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
+	} else if _, ok := metadata["result_consumed_after"]; !ok {
+		t.Fatalf("Metadata didn't match expected. Expected the key 'result_consumed_after'. Got: %#v", rows.Metadata())
 	}
 
 	err = conn.Close()
