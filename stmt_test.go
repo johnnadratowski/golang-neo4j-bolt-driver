@@ -39,8 +39,18 @@ func TestBoltStmt_SelectOne(t *testing.T) {
 	expectedMetadata := map[string]interface{}{
 		"fields": []interface{}{"1"},
 	}
-	if !reflect.DeepEqual(rows.Metadata(), expectedMetadata) {
+	resultingMetadata := make(map[string]interface{})
+
+	for key, value := range rows.Metadata() {
+		if key != "result_available_after" {
+			resultingMetadata[key] = value
+		}
+	}
+
+	if !reflect.DeepEqual(resultingMetadata, expectedMetadata) {
 		t.Fatalf("Unexpected success metadata. Expected %#v. Got: %#v", expectedMetadata, rows.Metadata())
+	} else if _, ok := rows.Metadata()["result_available_after"]; !ok {
+		t.Fatalf("Unexpected success metadata. Expected the key 'result_available_after'. Got: %#v", rows.Metadata())
 	}
 
 	output, _, err := rows.NextNeo()
@@ -53,11 +63,23 @@ func TestBoltStmt_SelectOne(t *testing.T) {
 	}
 
 	_, metadata, err := rows.NextNeo()
-	expectedMetadata = map[string]interface{}{"type": "r"}
+	expectedMetadata = map[string]interface{}{
+		"type": "r",
+	}
+	resultingMetadata = make(map[string]interface{})
+
+	for key, value := range metadata {
+		if key != "result_consumed_after" {
+			resultingMetadata[key] = value
+		}
+	}
+
 	if err != io.EOF {
 		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
-	} else if !reflect.DeepEqual(metadata, expectedMetadata) {
+	} else if !reflect.DeepEqual(resultingMetadata, expectedMetadata) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
+	} else if _, ok := metadata["result_consumed_after"]; !ok {
+		t.Fatalf("Metadata didn't match expected. Expected the key 'result_consumed_after'. Got: %#v", rows.Metadata())
 	}
 
 	err = conn.Close()
@@ -90,8 +112,18 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 	expectedMetadata := map[string]interface{}{
 		"fields": []interface{}{"1", "34234.34323", "\"string\"", "[1, \"2\", 3, true, null]", "true", "null"},
 	}
-	if !reflect.DeepEqual(rows.Metadata(), expectedMetadata) {
+	resultingMetadata := make(map[string]interface{})
+
+	for key, value := range rows.Metadata() {
+		if key != "result_available_after" {
+			resultingMetadata[key] = value
+		}
+	}
+
+	if !reflect.DeepEqual(resultingMetadata, expectedMetadata) {
 		t.Fatalf("Unexpected success metadata. Expected %#v. Got: %#v", expectedMetadata, rows.Metadata())
+	} else if _, ok := rows.Metadata()["result_available_after"]; !ok {
+		t.Fatalf("Unexpected success metadata. Expected the key 'result_available_after'. Got: %#v", rows.Metadata())
 	}
 
 	output, _, err := rows.NextNeo()
@@ -119,11 +151,24 @@ func TestBoltStmt_SelectMany(t *testing.T) {
 	}
 
 	_, metadata, err := rows.NextNeo()
-	expectedMetadata = map[string]interface{}{"type": "r"}
+	expectedMetadata = map[string]interface{}{
+		"type": "r",
+	}
+
+	resultingMetadata = make(map[string]interface{})
+
+	for key, value := range metadata {
+		if key != "result_consumed_after" {
+			resultingMetadata[key] = value
+		}
+	}
+
 	if err != io.EOF {
 		t.Fatalf("Unexpected row closed output. Expected io.EOF. Got: %s", err)
-	} else if !reflect.DeepEqual(metadata, expectedMetadata) {
+	} else if !reflect.DeepEqual(resultingMetadata, expectedMetadata) {
 		t.Fatalf("Metadata didn't match expected. Expected %#v. Got: %#v", expectedMetadata, metadata)
+	} else if _, ok := metadata["result_consumed_after"]; !ok {
+		t.Fatalf("Metadata didn't match expected. Expected the key 'result_consumed_after'. Got: %#v", metadata)
 	}
 
 	err = conn.Close()
@@ -158,7 +203,7 @@ func TestBoltStmt_InvalidArgs(t *testing.T) {
 	}
 	_, err = stmt.QueryNeo(args)
 
-	expected := "Collections containing mixed types can not be stored in properties"
+	expected := "Neo4j only supports a subset of Cypher types for storage as singleton or array properties. Please refer to section cypher/syntax/values of the manual for more details."
 	if !strings.Contains(err.Error(), expected) {
 		t.Fatalf("Did not recieve expected error: %s", err)
 	}
