@@ -286,3 +286,26 @@ func TestBoltConn_FailureMessageError(t *testing.T) {
 		t.Fatalf("Expected error message code %s, but got %v", code, err.(*errors.Error).InnerMost().(messages.FailureMessage).Metadata["code"])
 	}
 }
+
+func TestBoltConn_CloseStatementOnError(t *testing.T) {
+	driver := NewDriver()
+
+	// Records session for testing
+	driver.(*boltDriver).recorder = newRecorder("TestBoltConn_CloseStatementOnError", neo4jConnStr)
+
+	conn, err := driver.OpenNeo(neo4jConnStr)
+	defer conn.Close()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.QueryNeo("THIS IS A BAD QUERY AND SHOULD RETURN A FAILURE MESSAGE", nil)
+	if err == nil {
+		t.Fatal("This should have returned a failure message error, but got a nil error")
+	}
+
+	_, err = conn.QueryNeo("RETURN 1;", nil)
+	if err != nil {
+		t.Fatalf("Got error when running next query after a failure: %#v", err)
+	}
+}

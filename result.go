@@ -40,7 +40,7 @@ func (r boltResult) LastInsertId() (int64, error) {
 // interface.
 func (r boltResult) RowsAffected() (int64, error) {
 	// metadata omits stats when rowsAffected == 0, check existence to prevent panic
-	if  _, ok := r.metadata["stats"]; !ok {
+	if _, ok := r.metadata["stats"]; !ok {
 		return 0, nil
 	}
 
