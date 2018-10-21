@@ -780,10 +780,12 @@ func (c *boltConn) queryNeo(query string, params map[string]interface{}) (*boltR
 	// Pipeline the run + pull all for this
 	successResp, err := c.sendRunPullAllConsumeRun(c.statement.query, params)
 	if err != nil {
+		c.statement.Close()
 		return nil, err
 	}
 	success, ok := successResp.(messages.SuccessMessage)
 	if !ok {
+		c.statement.Close()
 		return nil, errors.New("Unexpected response querying neo from connection: %#v", successResp)
 	}
 
