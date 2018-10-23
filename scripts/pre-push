@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BOLT_DRIVER_LOG=error NEO4J_BOLT=bolt://localhost:7687 go test -v || {
+BOLT_DRIVER_LOG=error NEO4J_BOLT=bolt://neo4j:neo4j1@localhost:7687 go test -v || {
     echo "tests failed"
     exit 1;
 }
