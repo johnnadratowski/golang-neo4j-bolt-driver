@@ -284,3 +284,85 @@ func TestBoltDriverPool_ReclaimBadConn(t *testing.T) {
 		t.Fatalf("A new conn should have been established for an old conn that had an error. However, we got an error: %s", err)
 	}
 }
+
+func TestBoltDriverPool_RepeatQuieries(t *testing.T) {
+	if neo4jConnStr == "" {
+		t.Skip("Cannot run this test when in recording mode")
+	}
+
+	driver, err := NewDriverPool(neo4jConnStr, 1)
+	if err != nil {
+		t.Fatalf("An error occurred opening driver pool: %#v", err)
+	}
+
+	conn, err := driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
+	if err != nil {
+		t.Fatalf("An error occurred creating f neo: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Got an error closing the connection: %s", err)
+	}
+
+	conn, err = driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`MATCH (f:FOO) return f`, nil)
+	if err != nil {
+		t.Fatalf("An error occurred matching f neo: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Got an error closing the connection: %s", err)
+	}
+
+	conn, err = driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`MATCH (f:FOO) return f`, nil)
+	if err != nil {
+		t.Fatalf("An error occurred matching f neo: %s", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Got an error closing the connection: %s", err)
+	}
+}
+
+func TestBoltDriverPool_ClosePool(t *testing.T) {
+	if neo4jConnStr == "" {
+		t.Skip("Cannot run this test when in recording mode")
+	}
+
+	driver, err := NewClosableDriverPool(neo4jConnStr, 1)
+	if err != nil {
+		t.Fatalf("An error occurred opening driver pool: %#v", err)
+	}
+
+	conn, err := driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
+	if err != nil {
+		t.Fatalf("An error occurred creating f neo: %s", err)
+	}
+
+	err = driver.Close()
+	if(err != nil) {
+		t.Fatalf("An error occurred creating trying to close the driver pool: %s", err)
+	}
+}
