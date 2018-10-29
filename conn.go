@@ -609,7 +609,7 @@ func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{},
 }
 
 func (c *boltConn) sendInit() (interface{}, error) {
-	log.Infof("Sending INIT Message. ClientID: %s User: %s Password: %s", ClientID, c.user, c.password)
+	log.Infof("Sending INIT Message. ClientID: %s User: %s", ClientID, c.user)
 
 	initMessage := messages.NewInitMessage(ClientID, c.user, c.password)
 	if err := encoding.NewEncoder(c, c.chunkSize).Encode(initMessage); err != nil {
