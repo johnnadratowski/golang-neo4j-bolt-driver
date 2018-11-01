@@ -262,7 +262,7 @@ The tests are written in an integration testing style.  Most of them are in the 
 
 In order to get CI, I made a recorder mechanism so you don't need to run neo4j alongside the tests in the CI server.  You run the tests locally against a neo4j instance with the RECORD_OUTPUT=1 environment variable, it generates the recordings in the ./recordings folder.  This is necessary if the tests have changed, or if the internals have significantly changed.  Installing the git hooks will run the tests automatically on push.  If there are updated tests, you will need to re-run the recorder to add them and push them as well.
 
-You need access to a running Neo4J database to develop for this project, so that you can run the tests to generate the recordings.
+You need access to a running Neo4J database to develop for this project, so that you can run the tests to generate the recordings. For the recordings to be generated correctly you also need to make sure authorization is turned off on the Neo4J instance. For more information on Neo4J installation and configuration see the official Neo4j docs: https://neo4j.com/docs/operations-manual/current/installation/
 
 ## Supported Builds
 * Linux (1.4.x, 1.5.x, 1.6.x, 1.7.x, 1.8.x, 1.9.x and tip)
