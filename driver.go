@@ -1,12 +1,13 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"time"
 	"database/sql"
 	"database/sql/driver"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 	"sync"
+	"time"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
 )
 
 var (
@@ -94,15 +95,20 @@ type boltDriverPool struct {
 
 // NewDriverPool creates a new Driver object with connection pooling
 func NewDriverPool(connStr string, max int) (DriverPool, error) {
-	return createDriverPool(connStr, max)
+	return createDriverPool(connStr, max, 0)
 }
 
 // NewClosableDriverPool create a closable driver pool
 func NewClosableDriverPool(connStr string, max int) (ClosableDriverPool, error) {
-	return createDriverPool(connStr, max)
+	return createDriverPool(connStr, max, 0)
 }
 
-func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
+// NewClosableDriverPoolWithTimeout create a closable driver pool
+func NewClosableDriverPoolWithTimeout(connStr string, max int, timeout int) (ClosableDriverPool, error) {
+	return createDriverPool(connStr, max, timeout)
+}
+
+func createDriverPool(connStr string, max int, timeout int) (*boltDriverPool, error) {
 	d := &boltDriverPool{
 		connStr:  connStr,
 		maxConns: max,
@@ -113,6 +119,10 @@ func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
 		conn, err := newPooledBoltConn(connStr, d)
 		if err != nil {
 			return nil, err
+		}
+
+		if timeout > 0 {
+			conn.SetTimeout(time.Duration(timeout) * time.Second)
 		}
 
 		d.pool <- conn
@@ -140,15 +150,15 @@ func (d *boltDriverPool) OpenPool() (Conn, error) {
 	return nil, errors.New("Driver pool has been closed")
 }
 
-func connectionNilOrClosed(conn *boltConn) (bool) {
-	if(conn.conn == nil) {//nil check before attempting read
+func connectionNilOrClosed(conn *boltConn) bool {
+	if conn.conn == nil { //nil check before attempting read
 		return true
 	}
 	conn.conn.SetReadDeadline(time.Now())
-	zero := make ([]byte, 0)
-	_, err := conn.conn.Read(zero)//read zero bytes to validate connection is still alive
+	zero := make([]byte, 0)
+	_, err := conn.conn.Read(zero) //read zero bytes to validate connection is still alive
 	if err != nil {
-		log.Error("Bad Connection state detected", err)//the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
+		log.Error("Bad Connection state detected", err) //the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
 		return true
 	}
 	return false
