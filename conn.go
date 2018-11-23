@@ -60,6 +60,9 @@ type Conn interface {
 	// SetTimeout sets the read/write timeouts for the
 	// connection to Neo4j
 	SetTimeout(time.Duration)
+	// GetTimeout returns the read/write timeouts for the
+	// connection to Neo4j
+	GetTimeout() time.Duration
 }
 
 type boltConn struct {
@@ -544,6 +547,11 @@ func (c *boltConn) SetChunkSize(chunkSize uint16) {
 // Sets the timeout for reading and writing to the stream
 func (c *boltConn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
+}
+
+// Gets the timeout for reading and writing to the stream
+func (c *boltConn) GetTimeout() time.Duration {
+	return c.timeout
 }
 
 func (c *boltConn) consume() (interface{}, error) {
