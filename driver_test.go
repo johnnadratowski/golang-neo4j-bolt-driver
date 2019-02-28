@@ -8,7 +8,7 @@ import (
 
 	"sync"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/log"
 )
 
 var (
@@ -362,7 +362,33 @@ func TestBoltDriverPool_ClosePool(t *testing.T) {
 	}
 
 	err = driver.Close()
-	if(err != nil) {
+	if err != nil {
+		t.Fatalf("An error occurred creating trying to close the driver pool: %s", err)
+	}
+}
+
+func TestBoltDriverPool_SetTimeout(t *testing.T) {
+	if neo4jConnStr == "" {
+		t.Skip("Cannot run this test when in recording mode")
+	}
+
+	driver, err := NewClosableDriverPoolWithTimeout(neo4jConnStr, 1, 120)
+	if err != nil {
+		t.Fatalf("An error occurred opening driver pool: %#v", err)
+	}
+
+	conn, err := driver.OpenPool()
+	if err != nil {
+		t.Fatalf("An error occurred opening conn: %s", err)
+	}
+
+	timeout := conn.GetTimeout()
+	if timeout != time.Duration(120)*time.Second {
+		t.Fatalf("Timeout was not set as expected: %s", timeout)
+	}
+
+	err = driver.Close()
+	if err != nil {
 		t.Fatalf("An error occurred creating trying to close the driver pool: %s", err)
 	}
 }
