@@ -11,8 +11,8 @@ import (
 
 	"database/sql"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/encoding"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/structures/graph"
 )
 
 func TestBoltStmt_SelectOne(t *testing.T) {

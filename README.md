@@ -1,6 +1,6 @@
 # Golang Neo4J Bolt Driver
-[![Build Status](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver.svg?branch=master)](https://travis-ci.org/johnnadratowski/golang-neo4j-bolt-driver)
-[![GoDoc](https://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver?status.svg)](https://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver)
+[![Build Status](https://travis-ci.org/ONSdigital/golang-neo4j-bolt-driver.svg?branch=master)](https://travis-ci.org/ONSdigital/golang-neo4j-bolt-driver)
+[![GoDoc](https://godoc.org/github.com/ONSdigital/golang-neo4j-bolt-driver?status.svg)](https://godoc.org/github.com/ONSdigital/golang-neo4j-bolt-driver)
 
 
 **ANNOUNCEMENT: I must apologize to the community for not being more responsive.  Because of personal life events I am really not able to properly maintain this codebase.  Certain other events lead me to believe an official Neo4J Golang driver was to be released soon, but it seems like that may not necessarily be the case.  Since I am unable to properly maintain this codebase at this juncture, at this point I think it makes sense to open up this repo to collaborators who are interested in helping with maintenance.  Please feel free to email me directly if you're interested.**
@@ -9,7 +9,7 @@ Implements the Neo4J Bolt Protocol specification:
 As of the time of writing this, the current version is v3.1.0-M02
 
 ```
-go get github.com/johnnadratowski/golang-neo4j-bolt-driver
+go get github.com/ONSdigital/golang-neo4j-bolt-driver
 ```
 
 ## Features
@@ -221,7 +221,7 @@ func handleError(err error) {
 ```
 ## API
 
-*_There is much more detailed information in [the godoc](http://godoc.org/github.com/johnnadratowski/golang-neo4j-bolt-driver)_*
+*_There is much more detailed information in [the godoc](http://godoc.org/github.com/ONSdigital/golang-neo4j-bolt-driver)_*
 
 This implementation attempts to follow the best practices as per the Bolt specification, but also implements compatibility with Golang's `sql.driver` interface.
 

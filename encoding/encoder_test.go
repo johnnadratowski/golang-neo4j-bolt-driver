@@ -9,7 +9,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/errors"
 )
 
 const (

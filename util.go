@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/encoding"
 )
 
 // sprintByteHex returns a formatted string of the byte array in hexadecimal
