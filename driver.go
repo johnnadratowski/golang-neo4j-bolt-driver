@@ -1,12 +1,14 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"time"
 	"database/sql"
 	"database/sql/driver"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"io"
+	"net"
 	"sync"
+	"syscall"
+
+	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
 )
 
 var (
@@ -22,7 +24,8 @@ var (
 	// Version is the current version of this driver
 	Version = "1.0"
 	// ClientID is the id of this client
-	ClientID = "GolangNeo4jBolt/" + Version
+	ClientID          = "GolangNeo4jBolt/" + Version
+	errUnexpectedRead = errors.New("unexpected read from socket")
 )
 
 // Driver is a driver allowing connection to Neo4j
@@ -140,18 +143,50 @@ func (d *boltDriverPool) OpenPool() (Conn, error) {
 	return nil, errors.New("Driver pool has been closed")
 }
 
-func connectionNilOrClosed(conn *boltConn) (bool) {
-	if(conn.conn == nil) {//nil check before attempting read
+func connectionNilOrClosed(conn *boltConn) bool {
+	if conn.conn == nil { //nil check before attempting read
 		return true
 	}
-	conn.conn.SetReadDeadline(time.Now())
-	zero := make ([]byte, 0)
-	_, err := conn.conn.Read(zero)//read zero bytes to validate connection is still alive
-	if err != nil {
-		log.Error("Bad Connection state detected", err)//the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
+	if connCheck(conn.conn) != nil {
 		return true
 	}
 	return false
+}
+
+//This is was copied from here:
+// https://github.com/go-sql-driver/mysql/blob/master/conncheck.go
+// And Works !!
+func connCheck(c net.Conn) error {
+	var (
+		n    int
+		err  error
+		buff [1]byte
+	)
+
+	sconn, ok := c.(syscall.Conn)
+	if !ok {
+		return nil
+	}
+	rc, err := sconn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	rerr := rc.Read(func(fd uintptr) bool {
+		n, err = syscall.Read(int(fd), buff[:])
+		return true
+	})
+	switch {
+	case rerr != nil:
+		return rerr
+	case n == 0 && err == nil:
+		return io.EOF
+	case n > 0:
+		return errUnexpectedRead
+	case err == syscall.EAGAIN || err == syscall.EWOULDBLOCK:
+		return nil
+	default:
+		return err
+	}
 }
 
 // Close all connections in the pool
