@@ -8,7 +8,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/errors"
 )
 
 var (
