@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/alexwbaule/golang-neo4j-bolt-driver/errors"
 )
@@ -117,7 +118,8 @@ func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		duration, _ := time.ParseDuration("10s")
+		conn.SetTimeout(duration)
 		d.pool <- conn
 	}
 
@@ -147,7 +149,7 @@ func connectionNilOrClosed(conn *boltConn) bool {
 	if conn.conn == nil { //nil check before attempting read
 		return true
 	}
-	if connCheck(conn.conn) != nil {
+	if err := connCheck(conn.conn); err != nil {
 		return true
 	}
 	return false
@@ -162,6 +164,7 @@ func connCheck(c net.Conn) error {
 		err  error
 		buff [1]byte
 	)
+	c.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	sconn, ok := c.(syscall.Conn)
 	if !ok {
@@ -177,14 +180,18 @@ func connCheck(c net.Conn) error {
 	})
 	switch {
 	case rerr != nil:
+		c.Close()
 		return rerr
 	case n == 0 && err == nil:
+		c.Close()
 		return io.EOF
 	case n > 0:
+		c.Close()
 		return errUnexpectedRead
 	case err == syscall.EAGAIN || err == syscall.EWOULDBLOCK:
 		return nil
 	default:
+		c.Close()
 		return err
 	}
 }
