@@ -17,10 +17,10 @@ import (
 	"crypto/x509"
 	"strconv"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/encoding"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/errors"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/log"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Conn represents a connection to Neo4J
@@ -387,12 +387,14 @@ func (c *boltConn) Close() error {
 		return nil
 	}
 
-	err := c.conn.Close()
-	c.closed = true
-	if err != nil {
-		c.connErr = errors.Wrap(err, "An error occurred closing the connection")
-		return driver.ErrBadConn
+	if c.conn != nil {
+		err := c.conn.Close()
+		if err != nil {
+			c.connErr = errors.Wrap(err, "An error occurred closing the connection")
+			return driver.ErrBadConn
+		}
 	}
+	c.closed = true
 
 	return nil
 }

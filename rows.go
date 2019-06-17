@@ -4,11 +4,11 @@ import (
 	"database/sql/driver"
 	"io"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/encoding"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/errors"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/log"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/structures/graph"
+	"github.com/alexwbaule/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Rows represents results of rows from the DB
