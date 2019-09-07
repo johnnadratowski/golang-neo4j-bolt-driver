@@ -1,7 +1,6 @@
 package golangNeo4jBoltDriver
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
 	"net/url"
@@ -9,17 +8,17 @@ import (
 	"sync"
 )
 
-type BoltRoutingDriver struct{
-
-}
-
-func (b *BoltRoutingDriver) Open(string) (driver.Conn, error) {
-	return nil, errors.New("sql driver is not supported for routing mode")
-}
-
-func (b *BoltRoutingDriver) OpenNeo(string) (Conn, error) {
-	panic("implement me")
-}
+//type BoltRoutingDriver struct{
+//
+//}
+//
+//func (b *BoltRoutingDriver) Open(string) (driver.Conn, error) {
+//	return nil, errors.New("sql driver is not supported for routing mode")
+//}
+//
+//func (b *BoltRoutingDriver) OpenNeo(string) (Conn, error) {
+//	panic("implement me")
+//}
 
 type boltRoutingDriverPool struct {
 	//must be of the protocol `bolt+routing`
