@@ -8,7 +8,7 @@ import (
 
 	"sync"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
+	"github.com/mindstand/golang-neo4j-bolt-driver/log"
 )
 
 var (

@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	bolt "github.com/johnnadratowski/golang-neo4j-bolt-driver"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/graph"
+	bolt "github.com/mindstand/golang-neo4j-bolt-driver"
+	"github.com/mindstand/golang-neo4j-bolt-driver/structures/graph"
 )
 
 func main() {

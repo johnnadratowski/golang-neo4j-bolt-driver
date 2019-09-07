@@ -1,0 +1,125 @@
+version: '3'
+
+networks:
+  lan:
+
+services:
+
+  core1:
+    image: neo4j:3.5-enterprise
+    networks:
+      - lan
+    ports:
+      - 7474:7474
+      - 6477:6477
+      - 7687:7687
+    volumes:
+      - $HOME/neo4j/neo4j-core1/conf:/conf
+      - $HOME/neo4j/neo4j-core1/data:/data
+      - $HOME/neo4j/neo4j-core1/logs:/logs
+      - $HOME/neo4j/neo4j-core1/plugins:/plugins
+    environment:
+      #      - NEO4J_AUTH=none
+      - NEO4J_AUTH=neo4j/changeme
+      - NEO4J_dbms_mode=CORE
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=3
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=3
+      - NEO4J_causal__clustering_initial__discovery__members=core1:5000,core2:5000,core3:5000
+      - NEO4J_dbms_connector_http_listen__address=:7474
+      - NEO4J_dbms_connector_https_listen__address=:6477
+      - NEO4J_dbms_connector_bolt_listen__address=:7687
+
+  core2:
+    image: neo4j:3.5-enterprise
+    networks:
+      - lan
+    ports:
+      - 7475:7475
+      - 6478:6478
+      - 7688:7688
+    volumes:
+      - $HOME/neo4j/neo4j-core2/conf:/conf
+      - $HOME/neo4j/neo4j-core2/data:/data
+      - $HOME/neo4j/neo4j-core2/logs:/logs
+      - $HOME/neo4j/neo4j-core1/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/changeme
+      - NEO4J_dbms_mode=CORE
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=3
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=3
+      - NEO4J_causal__clustering_initial__discovery__members=core1:5000,core2:5000,core3:5000
+      - NEO4J_dbms_connector_http_listen__address=:7475
+      - NEO4J_dbms_connector_https_listen__address=:6478
+      - NEO4J_dbms_connector_bolt_listen__address=:7688
+
+  core3:
+    image: neo4j:3.5-enterprise
+    networks:
+      - lan
+    ports:
+      - 7476:7476
+      - 6479:6479
+      - 7689:7689
+    volumes:
+      - $HOME/neo4j/neo4j-core3/conf:/conf
+      - $HOME/neo4j/neo4j-core3/data:/data
+      - $HOME/neo4j/neo4j-core3/logs:/logs
+      - $HOME/neo4j/neo4j-core1/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/changeme
+      - NEO4J_dbms_mode=CORE
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=3
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=3
+      - NEO4J_causal__clustering_initial__discovery__members=core1:5000,core2:5000,core3:5000
+      - NEO4J_dbms_connector_http_listen__address=:7476
+      - NEO4J_dbms_connector_https_listen__address=:6479
+      - NEO4J_dbms_connector_bolt_listen__address=:7689
+
+  read1:
+    image: neo4j:3.5-enterprise
+    networks:
+      - lan
+    ports:
+      - 7477:7477
+      - 6480:6480
+      - 7690:7690
+    volumes:
+      - $HOME/neo4j/neo4j-read1/conf:/conf
+      - $HOME/neo4j/neo4j-read1/data:/data
+      - $HOME/neo4j/neo4j-read1/logs:/logs
+      - $HOME/neo4j/neo4j-core1/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/changeme
+      - NEO4J_dbms_mode=READ_REPLICA
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_causalClustering_initialDiscoveryMembers=core1:5000,core2:5000,core3:5000
+      - NEO4J_dbms_connector_http_listen__address=:7477
+      - NEO4J_dbms_connector_https_listen__address=:6480
+      - NEO4J_dbms_connector_bolt_listen__address=:7690
+
+  # This core demonstrates that additional instances can be added after the initial core is established (ie: this instance is nost listed within "initialDiscoveryMembers")
+  core4:
+    image: neo4j:3.5-enterprise
+    networks:
+      - lan
+    ports:
+      - 7478:7478
+      - 6481:6481
+      - 7691:7691
+    volumes:
+      - $HOME/neo4j/neo4j-core4/conf:/conf
+      - $HOME/neo4j/neo4j-core4/data:/data
+      - $HOME/neo4j/neo4j-core4/logs:/logs
+      - $HOME/neo4j/neo4j-core1/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/changeme
+      - NEO4J_dbms_mode=CORE
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      #      - NEO4J_causalClustering_expectedCoreClusterSize=3
+      - NEO4J_causal__clustering_initial__discovery__members=core1:5000,core2:5000,core3:5000
+      - NEO4J_dbms_connector_http_listen__address=:7478
+      - NEO4J_dbms_connector_https_listen__address=:6481
+      - NEO4J_dbms_connector_bolt_listen__address=:7691

@@ -17,10 +17,10 @@ import (
 	"crypto/x509"
 	"strconv"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/mindstand/golang-neo4j-bolt-driver/encoding"
+	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
+	"github.com/mindstand/golang-neo4j-bolt-driver/log"
+	"github.com/mindstand/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Conn represents a connection to Neo4J
@@ -78,6 +78,8 @@ type boltConn struct {
 	caCertFile    string
 	keyFile       string
 	tlsNoVerify   bool
+	isCluster		bool
+	clusterInfo *clusterConnectionConfig
 	transaction   *boltTx
 	statement     *boltStmt
 	driver        *boltDriver
@@ -116,14 +118,15 @@ func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
 	return c, nil
 }
 
-func (c *boltConn) parseURL() (*url.URL, error) {
+//url, is in a cluster, error
+func (c *boltConn) parseURL() (*url.URL, bool, error) {
 	user := ""
 	password := ""
 	url, err := url.Parse(c.connStr)
 	if err != nil {
-		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
-	} else if strings.ToLower(url.Scheme) != "bolt" {
-		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
+		return url, false, errors.Wrap(err, "An error occurred parsing bolt URL")
+	} else if strings.ToLower(url.Scheme) != "bolt" && strings.ToLower(url.Scheme) != "bolt+routing"{
+		return url, false, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' and 'bolt+routing' scheme.", url.Scheme)
 	}
 
 	if url.User != nil {
@@ -131,7 +134,7 @@ func (c *boltConn) parseURL() (*url.URL, error) {
 		var isSet bool
 		c.password, isSet = url.User.Password()
 		if !isSet {
-			return url, errors.New("Must specify password when passing user")
+			return url, false, errors.New("Must specify password when passing user")
 		}
 	}
 
@@ -139,7 +142,7 @@ func (c *boltConn) parseURL() (*url.URL, error) {
 	if timeout != "" {
 		timeoutInt, err := strconv.Atoi(timeout)
 		if err != nil {
-			return url, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
+			return url, false, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
 		}
 
 		c.timeout = time.Duration(timeoutInt) * time.Second
@@ -166,13 +169,13 @@ func (c *boltConn) parseURL() (*url.URL, error) {
 	log.Trace("Key File: ", c.keyFile)
 	log.Trace("CA Cert File: ", c.caCertFile)
 
-	return url, nil
+	return url, strings.ToLower(url.Scheme) == "bolt+routing", nil
 }
 
 func (c *boltConn) createConn() (net.Conn, error) {
 
 	var err error
-	c.url, err = c.parseURL()
+	c.url, c.isCluster, err = c.parseURL()
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred parsing the conn URL")
 	}
@@ -307,13 +310,22 @@ func (c *boltConn) initialize() error {
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		log.Infof("Successfully initiated Bolt connection: %+v", resp)
-		return nil
 	default:
 		log.Errorf("Got an unrecognized message when initializing connection :%+v", resp)
 		c.connErr = errors.New("Unrecognized response from the server: %#v", resp)
 		c.Close()
 		return driver.ErrBadConn
 	}
+
+	//if it is in a cluster, initialize
+	if c.isCluster {
+		c.clusterInfo, err = getClusterInfo(c)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Read reads the data from the underlying connection
