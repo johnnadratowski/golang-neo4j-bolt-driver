@@ -78,8 +78,7 @@ type boltConn struct {
 	caCertFile    string
 	keyFile       string
 	tlsNoVerify   bool
-	isCluster		bool
-	clusterInfo *clusterConnectionConfig
+	readOnly     bool
 	transaction   *boltTx
 	statement     *boltStmt
 	driver        *boltDriver
@@ -119,14 +118,14 @@ func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
 }
 
 //url, is in a cluster, error
-func (c *boltConn) parseURL() (*url.URL, bool, error) {
+func (c *boltConn) parseURL() (*url.URL, error) {
 	user := ""
 	password := ""
 	url, err := url.Parse(c.connStr)
 	if err != nil {
-		return url, false, errors.Wrap(err, "An error occurred parsing bolt URL")
-	} else if strings.ToLower(url.Scheme) != "bolt" && strings.ToLower(url.Scheme) != "bolt+routing"{
-		return url, false, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' and 'bolt+routing' scheme.", url.Scheme)
+		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
+	} else if strings.ToLower(url.Scheme) != "bolt" && strings.ToLower(url.Scheme) != "bolt+routing" {
+		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' and 'bolt+routing' scheme.", url.Scheme)
 	}
 
 	if url.User != nil {
@@ -134,7 +133,7 @@ func (c *boltConn) parseURL() (*url.URL, bool, error) {
 		var isSet bool
 		c.password, isSet = url.User.Password()
 		if !isSet {
-			return url, false, errors.New("Must specify password when passing user")
+			return url, errors.New("Must specify password when passing user")
 		}
 	}
 
@@ -142,7 +141,7 @@ func (c *boltConn) parseURL() (*url.URL, bool, error) {
 	if timeout != "" {
 		timeoutInt, err := strconv.Atoi(timeout)
 		if err != nil {
-			return url, false, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
+			return url, errors.New("Invalid format for timeout: %s.  Must be integer", timeout)
 		}
 
 		c.timeout = time.Duration(timeoutInt) * time.Second
@@ -169,13 +168,13 @@ func (c *boltConn) parseURL() (*url.URL, bool, error) {
 	log.Trace("Key File: ", c.keyFile)
 	log.Trace("CA Cert File: ", c.caCertFile)
 
-	return url, strings.ToLower(url.Scheme) == "bolt+routing", nil
+	return url, nil
 }
 
 func (c *boltConn) createConn() (net.Conn, error) {
 
 	var err error
-	c.url, c.isCluster, err = c.parseURL()
+	c.url, err = c.parseURL()
 	if err != nil {
 		return nil, errors.Wrap(err, "An error occurred parsing the conn URL")
 	}
@@ -315,14 +314,6 @@ func (c *boltConn) initialize() error {
 		c.connErr = errors.New("Unrecognized response from the server: %#v", resp)
 		c.Close()
 		return driver.ErrBadConn
-	}
-
-	//if it is in a cluster, initialize
-	if c.isCluster {
-		c.clusterInfo, err = getClusterInfo(c)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil

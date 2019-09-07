@@ -20,7 +20,7 @@ const (
 
 type neoNodeType int
 
-func infoFromRoleString(s string) (neoNodeType, dbAction){
+func infoFromRoleString(s string) (neoNodeType, dbAction) {
 	adjustedString := strings.ToLower(s)
 
 	switch adjustedString {
@@ -44,24 +44,24 @@ const (
 	WriteReplica neoNodeType = 3
 )
 
-type neoNodeConfig struct{
-	Id string
+type neoNodeConfig struct {
+	Id        string
 	Addresses []string
-	Database string
-	Groups []string
+	Database  string
+	Groups    []string
 
 	Action dbAction
 	Type   neoNodeType
 }
 
 type clusterConnectionConfig struct {
-	Leaders []neoNodeConfig
-	Followers []neoNodeConfig
-	ReadReplicas []neoNodeConfig
+	Leaders       []neoNodeConfig
+	Followers     []neoNodeConfig
+	ReadReplicas  []neoNodeConfig
 	WriteReplicas []neoNodeConfig
 }
 
-func getClusterInfo(conn *boltConn) (*clusterConnectionConfig, error) {
+func getClusterInfo(conn Conn) (*clusterConnectionConfig, error) {
 	if conn == nil {
 		return nil, errors.New("bolt connection can not be nil")
 	}
@@ -79,9 +79,9 @@ func getClusterInfo(conn *boltConn) (*clusterConnectionConfig, error) {
 	}
 
 	clusterConfig := clusterConnectionConfig{
-		Leaders: []neoNodeConfig{},
-		Followers: []neoNodeConfig{},
-		ReadReplicas: []neoNodeConfig{},
+		Leaders:       []neoNodeConfig{},
+		Followers:     []neoNodeConfig{},
+		ReadReplicas:  []neoNodeConfig{},
 		WriteReplicas: []neoNodeConfig{},
 	}
 
@@ -180,7 +180,7 @@ func convertInterfaceToStringArr(i interface{}) ([]string, error) {
 
 	arr := make([]string, len(iarr), cap(iarr))
 
-	for k, v := range iarr{
+	for k, v := range iarr {
 		arr[k], ok = v.(string)
 		if !ok {
 			return nil, errors.New("unable to parse interface{} to string")
