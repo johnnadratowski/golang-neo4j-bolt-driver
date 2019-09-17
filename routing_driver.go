@@ -1,24 +1,14 @@
 package golangNeo4jBoltDriver
 
 import (
+	"context"
 	"fmt"
+	pool "github.com/jolestar/go-commons-pool"
 	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
 	"net/url"
 	"strings"
 	"sync"
 )
-
-//type BoltRoutingDriver struct{
-//
-//}
-//
-//func (b *BoltRoutingDriver) Open(string) (driver.Conn, error) {
-//	return nil, errors.New("sql driver is not supported for routing mode")
-//}
-//
-//func (b *BoltRoutingDriver) OpenNeo(string) (Conn, error) {
-//	panic("implement me")
-//}
 
 type boltRoutingDriverPool struct {
 	//must be of the protocol `bolt+routing`
@@ -35,17 +25,15 @@ type boltRoutingDriverPool struct {
 
 	//write resources
 	writeConns int
-	writePool     chan *boltConn
-	writeConnRefs []*boltConn
+	writePool     *pool.ObjectPool
 
 	//read resources
 	readConns int
-	readPool     chan *boltConn
-	readConnRefs []*boltConn
+	readPool *pool.ObjectPool
 }
 
 func createRoutingDriverPool(connStr string, max int) (*boltRoutingDriverPool, error) {
-	if max == 2 {
+	if max < 2 {
 		return nil, errors.New("max must be at least 2")
 	}
 
@@ -106,16 +94,12 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 	}
 
 	b.config = clusterInfo
-	b.writePool = make(chan *boltConn, b.writeConns)
-	b.readPool = make(chan *boltConn, b.readConns)
 
 	//close original driver
 	err = clusterInfoDriver.Close()
 	if err != nil {
 		return err
 	}
-
-	//todo better distribution
 
 	writeConnStr := ""
 
@@ -143,19 +127,25 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 			}
 		}
 	}
+	//b.writePool
+	writeFactory := pool.NewPooledObjectFactorySimple(getPoolFunc([]string{writeConnStr}, false))
 
-	//make write pool
-	for i := 0; i < b.writeConns; i++ {
-		conn, err := newPooledBoltConn(writeConnStr, b)
-		if err != nil {
-			return err
-		}
-
-		conn.readOnly = false
-
-		b.writePool <- conn
-	}
-
+	b.writePool = pool.NewObjectPool(context.Background(), writeFactory, &pool.ObjectPoolConfig{
+		LIFO:                     true,
+		MaxTotal:                 b.writeConns,
+		MaxIdle:                  b.writeConns,
+		MinIdle:                  0,
+		TestOnCreate:             true,
+		TestOnBorrow:             true,
+		TestOnReturn:             true,
+		TestWhileIdle:            true,
+		BlockWhenExhausted:       true,
+		MinEvictableIdleTime:     pool.DefaultMinEvictableIdleTime,
+		SoftMinEvictableIdleTime: pool.DefaultSoftMinEvictableIdleTime,
+		NumTestsPerEvictionRun:   3,
+		TimeBetweenEvictionRuns:  0,
+	})
+	
 	var readUris []string
 	//parse followers
 	for _, follow := range b.config.Followers {
@@ -209,23 +199,23 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 		return errors.New("no read nodes to connect to")
 	}
 
-	counter := 0
-	for i := 0; i < b.readConns; i++ {
-		str := readUris[counter]
-		conn, err := newPooledBoltConn(str, b)
-		if err != nil {
-			return err
-		}
-
-		conn.readOnly = true
-
-		b.readPool <- conn
-
-		counter++
-		if counter >= len(readUris) {
-			counter = 0
-		}
-	}
+	readFactory := pool.NewPooledObjectFactorySimple(getPoolFunc(readUris, true))
+	b.readPool = pool.NewObjectPool(context.Background(), readFactory, &pool.ObjectPoolConfig{
+		LIFO:                     true,
+		MaxTotal:                 b.readConns,
+		MaxIdle:                  b.readConns,
+		MinIdle:                  0,
+		TestOnCreate:             true,
+		TestOnBorrow:             true,
+		TestOnReturn:             true,
+		TestWhileIdle:            true,
+		BlockWhenExhausted:       true,
+		MinEvictableIdleTime:     pool.DefaultMinEvictableIdleTime,
+		SoftMinEvictableIdleTime: pool.DefaultSoftMinEvictableIdleTime,
+		NumTestsPerEvictionRun:   3,
+		TimeBetweenEvictionRuns:  0,
+	})
+	
 	return nil
 }
 
@@ -233,51 +223,43 @@ func (b *boltRoutingDriverPool) Close() error {
 	b.refLock.Lock()
 	defer b.refLock.Unlock()
 
-	for _, conn := range b.writeConnRefs {
-		conn.poolDriver = nil
-		err := conn.Close()
-		if err != nil {
-			b.closed = true
-			return err
-		}
-	}
-
-	for _, conn := range b.readConnRefs {
-		conn.poolDriver = nil
-		err := conn.Close()
-		if err != nil {
-			b.closed = true
-			return err
-		}
-	}
+	b.writePool.Close(context.Background())
+	b.readPool.Close(context.Background())
 
 	b.closed = true
 	return nil
 }
 
-func (b boltRoutingDriverPool) OpenPool(mode DriverMode) (Conn, error) {
+func (b *boltRoutingDriverPool) Open(mode DriverMode) (*BoltConn, error) {
 	// For each connection request we need to block in case the Close function is called. This gives us a guarantee
 	// when closing the pool no new connections are made.
 	b.refLock.Lock()
 	defer b.refLock.Unlock()
+	ctx := context.Background()
 	if !b.closed {
 		if mode == ReadOnlyMode {
-			conn := <-b.readPool
-			if connectionNilOrClosed(conn) {
-				if err := conn.initialize(); err != nil {
-					return nil, err
-				}
-				b.readConnRefs = append(b.readConnRefs, conn)
+			connObj, err := b.readPool.BorrowObject(ctx)
+			if err != nil {
+				return nil, err
 			}
+			
+			conn, ok := connObj.(*BoltConn)
+			if !ok {
+				return nil, errors.New("unable to cast to *BoltConn")
+			}
+
 			return conn, nil
 		} else if mode == ReadWriteMode {
-			conn := <-b.writePool
-			if connectionNilOrClosed(conn) {
-				if err := conn.initialize(); err != nil {
-					return nil, err
-				}
-				b.writeConnRefs = append(b.writeConnRefs, conn)
+			connObj, err := b.writePool.BorrowObject(ctx)
+			if err != nil {
+				return nil, err
 			}
+
+			conn, ok := connObj.(*BoltConn)
+			if !ok {
+				return nil, errors.New("unable to cast to *BoltConn")
+			}
+
 			return conn, nil
 		} else {
 			return nil, errors.New("invalid driver mode")
@@ -286,80 +268,49 @@ func (b boltRoutingDriverPool) OpenPool(mode DriverMode) (Conn, error) {
 	return nil, errors.New("Driver pool has been closed")
 }
 
-func (b boltRoutingDriverPool) reclaim(conn *boltConn) error {
-	var newConn *boltConn
-	var err error
-	if conn.connErr != nil || conn.closed {
-		newConn, err = newPooledBoltConn(conn.connStr, b)
+func (b *boltRoutingDriverPool) Reclaim(conn *BoltConn) error {
+	if conn == nil {
+		return errors.New("cannot reclaim nil connection")
+	}
+	if connectionNilOrClosed(conn) {
+		err := conn.initialize()
 		if err != nil {
 			return err
 		}
+
+		conn.closed = false
+		conn.statement = nil
+		conn.transaction = nil
+
 	} else {
-		// sneakily swap out connection so a reference to
-		// it isn't held on to
-		newConn = &boltConn{}
-		*newConn = *conn
+		if conn.statement != nil {
+			if !conn.statement.closed {
+				if conn.statement.rows != nil && !conn.statement.rows.closed {
+					err := conn.statement.rows.Close()
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			conn.statement = nil
+		}
+
+		if conn.transaction != nil {
+			if !conn.transaction.closed {
+				err := conn.transaction.Rollback()
+				if err != nil {
+					return err
+				}
+			}
+
+			conn.transaction = nil
+		}
 	}
 
 	if conn.readOnly {
-		b.readPool <- newConn
+		return b.readPool.ReturnObject(context.Background(), conn)
 	} else {
-		b.writePool <- newConn
+		return b.writePool.ReturnObject(context.Background(), conn)
 	}
-	
-	conn = nil
-
-	return nil
 }
-//
-//type BoltRoutingConn struct{
-//
-//}
-//
-//func newPooledBoltRoutingConn(connStr string, d DriverPool) (*boltConn, error) {
-//	return nil, nil
-//}
-//
-//func (b *BoltRoutingConn) PrepareNeo(query string) (Stmt, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) PreparePipeline(query ...string) (PipelineStmt, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) QueryNeo(query string, params map[string]interface{}) (Rows, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) QueryPipeline(query []string, params ...map[string]interface{}) (PipelineRows, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) ExecNeo(query string, params map[string]interface{}) (Result, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) ExecPipeline(query []string, params ...map[string]interface{}) ([]Result, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) Close() error {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) Begin() (driver.Tx, error) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) SetChunkSize(uint16) {
-//	panic("implement me")
-//}
-//
-//func (b *BoltRoutingConn) SetTimeout(time.Duration) {
-//	panic("implement me")
-//}

@@ -15,11 +15,11 @@ type Tx interface {
 }
 
 type boltTx struct {
-	conn   *boltConn
+	conn   *BoltConn
 	closed bool
 }
 
-func newTx(conn *boltConn) *boltTx {
+func newTx(conn *BoltConn) *boltTx {
 	return &boltTx{
 		conn: conn,
 	}

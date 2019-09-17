@@ -11,7 +11,7 @@ func TestRoutingPoolInit(t *testing.T) {
 		t.FailNow()
 	}
 
-	rwConn, err := driver.OpenPool(ReadWriteMode)
+	rwConn, err := driver.Open(ReadWriteMode)
 	if err != nil {
 		t.Log(err.Error())
 		t.FailNow()
@@ -42,7 +42,7 @@ func TestRoutingPoolInit(t *testing.T) {
 	}
 
 	//attempt to make an invalid connection
-	roConn, err := driver.OpenPool(ReadOnlyMode)
+	roConn, err := driver.Open(ReadOnlyMode)
 	if err != nil {
 		t.Log(err.Error())
 		t.FailNow()

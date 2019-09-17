@@ -72,7 +72,7 @@ func TestBoltDriverPool_OpenNeo(t *testing.T) {
 	now := time.Now().Unix()
 	for i := 0; i < 25; i++ {
 		go func() {
-			c, err := pool.OpenPool(0)
+			c, err := pool.Open(0)
 			if err != nil {
 				t.Fatalf("An error occurred opening conn from pool: %#v", err)
 			}
@@ -81,7 +81,7 @@ func TestBoltDriverPool_OpenNeo(t *testing.T) {
 		}()
 	}
 
-	c, err := pool.OpenPool(0)
+	c, err := pool.Open(0)
 	if !(time.Now().Unix()-now < 200) {
 		t.Fatalf("An error occurred opening conn from pool at end: %#v", err)
 	}
@@ -110,7 +110,7 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		conn, err := driver.OpenPool(0)
+		conn, err := driver.Open(0)
 		if err != nil {
 			t.Fatalf("An error occurred opening conn: %s", err)
 		}
@@ -185,7 +185,7 @@ func TestBoltDriverPool_Concurrent(t *testing.T) {
 		log.Info("SECOND: FINISHED WAIT ON 1")
 		defer wg.Done()
 
-		conn, err := driver.OpenPool(0)
+		conn, err := driver.Open(0)
 		if err != nil {
 			log.Panicf("An error occurred opening conn: %s", err)
 		}
@@ -247,7 +247,7 @@ func TestBoltDriverPool_ReclaimBadConn(t *testing.T) {
 		t.Fatalf("An error occurred opening driver pool: %#v", err)
 	}
 
-	conn, err := driver.OpenPool(0)
+	conn, err := driver.Open(0)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -257,7 +257,7 @@ func TestBoltDriverPool_ReclaimBadConn(t *testing.T) {
 		t.Fatalf("An error occurred creating f neo: %s", err)
 	}
 
-	err = conn.(*boltConn).conn.Close()
+	err = conn.conn.Close()
 	if err != nil {
 		t.Fatalf("An error occurred closing underlying connection: %s", err)
 	}
@@ -265,8 +265,6 @@ func TestBoltDriverPool_ReclaimBadConn(t *testing.T) {
 	_, err = conn.ExecNeo(`CREATE (f:FOO)`, nil)
 	if err == nil {
 		t.Fatal("An error should have occurred when trying to make a call with a closed connection")
-	} else if conn.(*boltConn).connErr == nil {
-		t.Fatal("A connection error should have been associated to the conn after a bad connection")
 	}
 
 	err = conn.Close()
@@ -274,7 +272,7 @@ func TestBoltDriverPool_ReclaimBadConn(t *testing.T) {
 		t.Fatalf("Got an error closing a bad connection: %s", err)
 	}
 
-	conn, err = driver.OpenPool(0)
+	conn, err = driver.Open(0)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -295,7 +293,7 @@ func TestBoltDriverPool_RepeatQuieries(t *testing.T) {
 		t.Fatalf("An error occurred opening driver pool: %#v", err)
 	}
 
-	conn, err := driver.OpenPool(0)
+	conn, err := driver.Open(0)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -310,7 +308,7 @@ func TestBoltDriverPool_RepeatQuieries(t *testing.T) {
 		t.Fatalf("Got an error closing the connection: %s", err)
 	}
 
-	conn, err = driver.OpenPool(0)
+	conn, err = driver.Open(0)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -325,7 +323,7 @@ func TestBoltDriverPool_RepeatQuieries(t *testing.T) {
 		t.Fatalf("Got an error closing the connection: %s", err)
 	}
 
-	conn, err = driver.OpenPool(0)
+	conn, err = driver.Open(0)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
@@ -351,7 +349,7 @@ func TestBoltDriverPool_ClosePool(t *testing.T) {
 		t.Fatalf("An error occurred opening driver pool: %#v", err)
 	}
 
-	conn, err := driver.OpenPool(0)
+	conn, err := driver.Open(0)
 	if err != nil {
 		t.Fatalf("An error occurred opening conn: %s", err)
 	}
