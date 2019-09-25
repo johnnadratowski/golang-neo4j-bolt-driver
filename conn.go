@@ -3,6 +3,7 @@ package golangNeo4jBoltDriver
 import (
 	"bytes"
 	"database/sql/driver"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"time"
@@ -343,6 +344,10 @@ func (c *BoltConn) Close() error {
 		if err := c.transaction.Rollback(); err != nil {
 			return errors.Wrap(err, "Error rolling back transaction when closing connection")
 		}
+	}
+
+	if c.conn == nil {
+		return errors.New("can not close nil connection")
 	}
 
 	err := c.conn.Close()
@@ -740,12 +745,16 @@ func (c *BoltConn) queryNeo(query string, params map[string]interface{}) (*boltR
 	// Pipeline the run + pull all for this
 	successResp, err := c.sendRunPullAllConsumeRun(c.statement.query, params)
 	if err != nil {
-		c.statement.Close()
+		if wErr := c.statement.Close(); wErr != nil {
+			return nil, fmt.Errorf("statement close failed, %v, %w", wErr, err)
+		}
 		return nil, err
 	}
 	success, ok := successResp.(messages.SuccessMessage)
 	if !ok {
-		c.statement.Close()
+		if wErr := c.statement.Close(); wErr != nil {
+			return nil, fmt.Errorf("unexpected response querying neo from connection: %#v, %w", successResp, wErr)
+		}
 		return nil, errors.New("Unexpected response querying neo from connection: %#v", successResp)
 	}
 
