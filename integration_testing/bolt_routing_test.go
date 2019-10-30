@@ -28,7 +28,7 @@ func TestBoltRoutingPool(t *testing.T) {
 		go func(i int, wg *sync.WaitGroup) {
 			var err error
 			conn := &dr.BoltConn{}
-			if i % 2 == 0{
+			if i%2 == 0 {
 				log.Println(i, "write", writes)
 				writes++
 				conn, err = driver.Open(dr.ReadWriteMode)
@@ -64,7 +64,7 @@ func TestBoltRoutingPool(t *testing.T) {
 				}
 			} else {
 				log.Println(i, "read", reads)
-				reads ++
+				reads++
 				conn, err = driver.Open(dr.ReadOnlyMode)
 				if err != nil {
 					t.Log(err.Error())
@@ -77,7 +77,7 @@ func TestBoltRoutingPool(t *testing.T) {
 					t.FailNow()
 				}
 
-				_, _, _,err = conn.QueryNeoAll("match (n) return n limit 2", nil)
+				_, _, _, err = conn.QueryNeoAll("match (n) return n limit 2", nil)
 				if err != nil {
 					t.Log(err.Error())
 					t.FailNow()
@@ -89,16 +89,15 @@ func TestBoltRoutingPool(t *testing.T) {
 					t.FailNow()
 				}
 
-				_, _, _,err = conn.QueryNeoAll("match (n) return n limit 2", nil)
+				_, _, _, err = conn.QueryNeoAll("match (n) return n limit 2", nil)
 				if err != nil {
 					t.Log(err.Error())
 					t.FailNow()
 				}
 
-
 			}
 
-			if i % 5 == 0 {
+			if i%5 == 0 {
 				err := conn.Close()
 				if err != nil {
 					t.Log(err.Error())

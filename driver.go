@@ -104,7 +104,7 @@ type boltDriverPool struct {
 // NewDriverPool creates a new Driver object with connection pooling
 func NewDriverPool(connStr string, max int) (DriverPool, error) {
 	//check if its bolt or bolt+routing
-	if strings.Contains(connStr, "bolt+routing"){
+	if strings.Contains(connStr, "bolt+routing") {
 		return createRoutingDriverPool(connStr, max)
 	}
 
@@ -114,7 +114,7 @@ func NewDriverPool(connStr string, max int) (DriverPool, error) {
 // NewClosableDriverPool create a closable driver pool
 func NewClosableDriverPool(connStr string, max int) (ClosableDriverPool, error) {
 	//check if its bolt or bolt+routing
-	if strings.Contains(connStr, "bolt+routing"){
+	if strings.Contains(connStr, "bolt+routing") {
 		return createRoutingDriverPool(connStr, max)
 	}
 
@@ -137,7 +137,7 @@ func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
 		NumTestsPerEvictionRun:   3,
 		TimeBetweenEvictionRuns:  0,
 	})
-	
+
 	return &boltDriverPool{
 		connStr:  connStr,
 		maxConns: max,

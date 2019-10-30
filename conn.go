@@ -79,7 +79,7 @@ type BoltConn struct {
 	caCertFile    string
 	keyFile       string
 	tlsNoVerify   bool
-	readOnly     bool
+	readOnly      bool
 	transaction   *boltTx
 	statement     *boltStmt
 }
@@ -87,7 +87,7 @@ type BoltConn struct {
 func createBoltConn(connStr string) (*BoltConn, error) {
 	conn := &BoltConn{
 		connStr:       connStr,
-		connErr: 		nil,
+		connErr:       nil,
 		timeout:       time.Second * time.Duration(60),
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
@@ -257,7 +257,6 @@ func (c *BoltConn) initialize() error {
 		}
 		return err
 	}
-
 
 	if err := c.handShake(); err != nil {
 		if e := c.Close(); e != nil {

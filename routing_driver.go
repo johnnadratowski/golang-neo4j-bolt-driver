@@ -15,7 +15,7 @@ type boltRoutingDriverPool struct {
 	connStr  string
 	maxConns int
 	refLock  sync.Mutex
-	closed bool
+	closed   bool
 
 	username string
 	password string
@@ -25,11 +25,11 @@ type boltRoutingDriverPool struct {
 
 	//write resources
 	writeConns int
-	writePool     *pool.ObjectPool
+	writePool  *pool.ObjectPool
 
 	//read resources
 	readConns int
-	readPool *pool.ObjectPool
+	readPool  *pool.ObjectPool
 }
 
 func createRoutingDriverPool(connStr string, max int) (*boltRoutingDriverPool, error) {
@@ -41,9 +41,9 @@ func createRoutingDriverPool(connStr string, max int) (*boltRoutingDriverPool, e
 	var readConns int
 
 	//max conns is even
-	if max % 2 == 0 {
-		writeConns = max/2
-		readConns = max/2
+	if max%2 == 0 {
+		writeConns = max / 2
+		readConns = max / 2
 	} else {
 		//if given odd, make more write conns
 		c := (max - 1) / 2
@@ -64,7 +64,7 @@ func createRoutingDriverPool(connStr string, max int) (*boltRoutingDriverPool, e
 	d := &boltRoutingDriverPool{
 		//main stuff
 		maxConns: max,
-		connStr: connStr,
+		connStr:  connStr,
 		username: u.User.Username(),
 		password: pwd,
 		//write
@@ -103,9 +103,9 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 
 	writeConnStr := ""
 
-	for _, l := range b.config.Leaders{
-		for _, a := range l.Addresses{
-			if strings.Contains(a, "bolt"){
+	for _, l := range b.config.Leaders {
+		for _, a := range l.Addresses {
+			if strings.Contains(a, "bolt") {
 				//retain login info
 				if b.username != "" {
 					u, err := url.Parse(a)
@@ -114,7 +114,7 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 					}
 
 					pwdStr := ""
-					if b.password != ""{
+					if b.password != "" {
 						pwdStr = fmt.Sprintf(":%s@", b.password)
 					}
 
@@ -145,11 +145,11 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 		NumTestsPerEvictionRun:   3,
 		TimeBetweenEvictionRuns:  0,
 	})
-	
+
 	var readUris []string
 	//parse followers
 	for _, follow := range b.config.Followers {
-		for _, a := range follow.Addresses{
+		for _, a := range follow.Addresses {
 			if strings.Contains(a, "bolt") {
 				if b.username != "" {
 					u, err := url.Parse(a)
@@ -158,7 +158,7 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 					}
 
 					pwdStr := ""
-					if b.password != ""{
+					if b.password != "" {
 						pwdStr = fmt.Sprintf(":%s@", b.password)
 					}
 
@@ -172,7 +172,7 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 	}
 
 	//parse replicas
-	for _, replica := range b.config.ReadReplicas{
+	for _, replica := range b.config.ReadReplicas {
 		for _, a := range replica.Addresses {
 			if strings.Contains(a, "bolt") {
 				if b.username != "" {
@@ -182,7 +182,7 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 					}
 
 					pwdStr := ""
-					if b.password != ""{
+					if b.password != "" {
 						pwdStr = fmt.Sprintf(":%s@", b.password)
 					}
 
@@ -215,7 +215,7 @@ func (b *boltRoutingDriverPool) refreshConnectionPool() error {
 		NumTestsPerEvictionRun:   3,
 		TimeBetweenEvictionRuns:  0,
 	})
-	
+
 	return nil
 }
 
