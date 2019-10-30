@@ -237,33 +237,51 @@ func (b *boltRoutingDriverPool) Open(mode DriverMode) (*BoltConn, error) {
 	defer b.refLock.Unlock()
 	ctx := context.Background()
 	if !b.closed {
-		if mode == ReadOnlyMode {
+		conn := &BoltConn{}
+		var ok bool
+
+		switch mode {
+		case ReadOnlyMode:
 			connObj, err := b.readPool.BorrowObject(ctx)
 			if err != nil {
 				return nil, err
 			}
-			
-			conn, ok := connObj.(*BoltConn)
+
+			conn, ok = connObj.(*BoltConn)
 			if !ok {
 				return nil, errors.New("unable to cast to *BoltConn")
 			}
-
-			return conn, nil
-		} else if mode == ReadWriteMode {
+			break
+		case ReadWriteMode:
 			connObj, err := b.writePool.BorrowObject(ctx)
 			if err != nil {
 				return nil, err
 			}
 
-			conn, ok := connObj.(*BoltConn)
+			conn, ok = connObj.(*BoltConn)
 			if !ok {
 				return nil, errors.New("unable to cast to *BoltConn")
 			}
-
-			return conn, nil
-		} else {
+			break
+		default:
 			return nil, errors.New("invalid driver mode")
 		}
+
+		//check to make sure the connection is open
+		if connectionNilOrClosed(conn) {
+			//if it isn't, reset it
+			err := conn.initialize()
+			if err != nil {
+				return nil, err
+			}
+
+			conn.closed = false
+			conn.connErr = nil
+			conn.statement = nil
+			conn.transaction = nil
+		}
+
+		return conn, nil
 	}
 	return nil, errors.New("Driver pool has been closed")
 }
@@ -279,6 +297,7 @@ func (b *boltRoutingDriverPool) Reclaim(conn *BoltConn) error {
 		}
 
 		conn.closed = false
+		conn.connErr = nil
 		conn.statement = nil
 		conn.transaction = nil
 

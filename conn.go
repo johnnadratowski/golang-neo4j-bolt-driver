@@ -87,6 +87,7 @@ type BoltConn struct {
 func createBoltConn(connStr string) (*BoltConn, error) {
 	conn := &BoltConn{
 		connStr:       connStr,
+		connErr: 		nil,
 		timeout:       time.Second * time.Duration(60),
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),

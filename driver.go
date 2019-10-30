@@ -162,6 +162,20 @@ func (d *boltDriverPool) Open(DriverMode) (*BoltConn, error) {
 			return nil, errors.New("unable to cast to *BoltConn")
 		}
 
+		//check to make sure the connection is open
+		if connectionNilOrClosed(conn) {
+			//if it isn't, reset it
+			err := conn.initialize()
+			if err != nil {
+				return nil, err
+			}
+
+			conn.closed = false
+			conn.connErr = nil
+			conn.statement = nil
+			conn.transaction = nil
+		}
+
 		return conn, nil
 	}
 	return nil, errors.New("Driver pool has been closed")
@@ -184,6 +198,12 @@ func connectionNilOrClosed(conn *BoltConn) bool {
 		log.Error("Bad Connection state detected", err) //the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
 		return true
 	}
+
+	//check if there were any connection errors
+	if conn.connErr != nil {
+		return true
+	}
+
 	return false
 }
 
@@ -211,6 +231,7 @@ func (d *boltDriverPool) Reclaim(conn *BoltConn) error {
 		}
 
 		conn.closed = false
+		conn.connErr = nil
 		conn.statement = nil
 		conn.transaction = nil
 	} else {
