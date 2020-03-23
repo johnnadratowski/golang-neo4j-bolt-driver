@@ -1,12 +1,15 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"time"
+	"context"
 	"database/sql"
 	"database/sql/driver"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
+	pool "github.com/jolestar/go-commons-pool"
+	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
+	"github.com/mindstand/golang-neo4j-bolt-driver/log"
+	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -56,13 +59,20 @@ func NewDriver() Driver {
 
 // Open opens a new Bolt connection to the Neo4J database
 func (d *boltDriver) Open(connStr string) (driver.Conn, error) {
-	return newBoltConn(connStr, d) // Never use pooling when using SQL driver
+	return createBoltConn(connStr) // Never use pooling when using SQL driver
 }
 
 // Open opens a new Bolt connection to the Neo4J database. Implements a Neo-friendly alternative to sql/driver.
 func (d *boltDriver) OpenNeo(connStr string) (Conn, error) {
-	return newBoltConn(connStr, d)
+	return createBoltConn(connStr)
 }
+
+type DriverMode int
+
+const (
+	ReadOnlyMode  DriverMode = 0
+	ReadWriteMode DriverMode = 1
+)
 
 // DriverPool is a driver allowing connection to Neo4j with support for connection pooling
 // The driver allows you to open a new connection to Neo4j
@@ -72,9 +82,9 @@ func (d *boltDriver) OpenNeo(connStr string) (Conn, error) {
 // themselves, and any prepared statements/transactions within ARE NOT
 // THREAD SAFE.
 type DriverPool interface {
-	// OpenPool opens a Neo-specific connection.
-	OpenPool() (Conn, error)
-	reclaim(*boltConn) error
+	// Open opens a Neo-specific connection.
+	Open(mode DriverMode) (*BoltConn, error)
+	Reclaim(*BoltConn) error
 }
 
 // ClosableDriverPool like the DriverPool but with a closable function
@@ -86,71 +96,114 @@ type ClosableDriverPool interface {
 type boltDriverPool struct {
 	connStr  string
 	maxConns int
-	pool     chan *boltConn
-	connRefs []*boltConn
+	pool     *pool.ObjectPool
 	refLock  sync.Mutex
 	closed   bool
 }
 
 // NewDriverPool creates a new Driver object with connection pooling
 func NewDriverPool(connStr string, max int) (DriverPool, error) {
+	//check if its bolt or bolt+routing
+	if strings.Contains(connStr, "bolt+routing") {
+		return createRoutingDriverPool(connStr, max)
+	}
+
 	return createDriverPool(connStr, max)
 }
 
 // NewClosableDriverPool create a closable driver pool
 func NewClosableDriverPool(connStr string, max int) (ClosableDriverPool, error) {
+	//check if its bolt or bolt+routing
+	if strings.Contains(connStr, "bolt+routing") {
+		return createRoutingDriverPool(connStr, max)
+	}
+
 	return createDriverPool(connStr, max)
 }
 
 func createDriverPool(connStr string, max int) (*boltDriverPool, error) {
-	d := &boltDriverPool{
+	dPool := pool.NewObjectPool(context.Background(), pool.NewPooledObjectFactorySimple(getPoolFunc([]string{connStr}, false)), &pool.ObjectPoolConfig{
+		LIFO:                     true,
+		MaxTotal:                 max,
+		MaxIdle:                  max,
+		MinIdle:                  0,
+		TestOnCreate:             true,
+		TestOnBorrow:             true,
+		TestOnReturn:             true,
+		TestWhileIdle:            true,
+		BlockWhenExhausted:       true,
+		MinEvictableIdleTime:     pool.DefaultMinEvictableIdleTime,
+		SoftMinEvictableIdleTime: pool.DefaultSoftMinEvictableIdleTime,
+		NumTestsPerEvictionRun:   3,
+		TimeBetweenEvictionRuns:  0,
+	})
+
+	return &boltDriverPool{
 		connStr:  connStr,
 		maxConns: max,
-		pool:     make(chan *boltConn, max),
-	}
-
-	for i := 0; i < max; i++ {
-		conn, err := newPooledBoltConn(connStr, d)
-		if err != nil {
-			return nil, err
-		}
-
-		d.pool <- conn
-	}
-
-	return d, nil
+		pool:     dPool,
+	}, nil
 }
 
-// OpenPool opens a returns a Bolt connection from the pool to the Neo4J database.
-func (d *boltDriverPool) OpenPool() (Conn, error) {
+// Open opens a returns a Bolt connection from the pool to the Neo4J database.
+func (d *boltDriverPool) Open(DriverMode) (*BoltConn, error) {
 	// For each connection request we need to block in case the Close function is called. This gives us a guarantee
 	// when closing the pool no new connections are made.
 	d.refLock.Lock()
 	defer d.refLock.Unlock()
 	if !d.closed {
-		conn := <-d.pool
+		connObj, err := d.pool.BorrowObject(context.Background())
+		if err != nil {
+			return nil, err
+		}
+
+		conn, ok := connObj.(*BoltConn)
+		if !ok {
+			return nil, errors.New("unable to cast to *BoltConn")
+		}
+
+		//check to make sure the connection is open
 		if connectionNilOrClosed(conn) {
-			if err := conn.initialize(); err != nil {
+			//if it isn't, reset it
+			err := conn.initialize()
+			if err != nil {
 				return nil, err
 			}
-			d.connRefs = append(d.connRefs, conn)
+
+			conn.closed = false
+			conn.connErr = nil
+			conn.statement = nil
+			conn.transaction = nil
 		}
+
 		return conn, nil
 	}
 	return nil, errors.New("Driver pool has been closed")
 }
 
-func connectionNilOrClosed(conn *boltConn) (bool) {
-	if(conn.conn == nil) {//nil check before attempting read
+func connectionNilOrClosed(conn *BoltConn) bool {
+	if conn.conn == nil { //nil check before attempting read
 		return true
 	}
-	conn.conn.SetReadDeadline(time.Now())
-	zero := make ([]byte, 0)
-	_, err := conn.conn.Read(zero)//read zero bytes to validate connection is still alive
+	err := conn.conn.SetReadDeadline(time.Now())
 	if err != nil {
-		log.Error("Bad Connection state detected", err)//the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
+		log.Error("Bad Connection state detected", err) //the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
 		return true
 	}
+
+	zero := make([]byte, 0)
+
+	_, err = conn.conn.Read(zero) //read zero bytes to validate connection is still alive
+	if err != nil {
+		log.Error("Bad Connection state detected", err) //the error caught here could be a io.EOF or a timeout, either way we want to log the error & return true
+		return true
+	}
+
+	//check if there were any connection errors
+	if conn.connErr != nil {
+		return true
+	}
+
 	return false
 }
 
@@ -159,39 +212,54 @@ func (d *boltDriverPool) Close() error {
 	// Lock the connection ref so no new connections can be added
 	d.refLock.Lock()
 	defer d.refLock.Unlock()
-	for _, conn := range d.connRefs {
-		// Remove the reference to the pool, to allow a clean up of the connection
-		conn.poolDriver = nil
-		err := conn.Close()
-		if err != nil {
-			d.closed = true
-			return err
-		}
-	}
-	// Mark the pool as closed to stop any new connections
+
+	d.pool.Close(context.Background())
+
 	d.closed = true
+
 	return nil
 }
 
-func (d *boltDriverPool) reclaim(conn *boltConn) error {
-	var newConn *boltConn
-	var err error
-	if conn.connErr != nil || conn.closed {
-		newConn, err = newPooledBoltConn(d.connStr, d)
+func (d *boltDriverPool) Reclaim(conn *BoltConn) error {
+	if conn == nil {
+		return errors.New("cannot reclaim nil connection")
+	}
+	if connectionNilOrClosed(conn) {
+		err := conn.initialize()
 		if err != nil {
 			return err
 		}
+
+		conn.closed = false
+		conn.connErr = nil
+		conn.statement = nil
+		conn.transaction = nil
 	} else {
-		// sneakily swap out connection so a reference to
-		// it isn't held on to
-		newConn = &boltConn{}
-		*newConn = *conn
+		if conn.statement != nil {
+			if !conn.statement.closed {
+				if conn.statement.rows != nil && !conn.statement.rows.closed {
+					err := conn.statement.rows.Close()
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			conn.statement = nil
+		}
+
+		if conn.transaction != nil {
+			if !conn.transaction.closed {
+				err := conn.transaction.Rollback()
+				if err != nil {
+					return err
+				}
+			}
+
+			conn.transaction = nil
+		}
 	}
-
-	d.pool <- newConn
-	conn = nil
-
-	return nil
+	return d.pool.ReturnObject(context.Background(), conn)
 }
 
 func init() {

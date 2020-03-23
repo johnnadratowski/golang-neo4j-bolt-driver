@@ -1,9 +1,9 @@
 package golangNeo4jBoltDriver
 
 import (
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
+	"github.com/mindstand/golang-neo4j-bolt-driver/log"
+	"github.com/mindstand/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Tx represents a transaction
@@ -15,11 +15,11 @@ type Tx interface {
 }
 
 type boltTx struct {
-	conn   *boltConn
+	conn   *BoltConn
 	closed bool
 }
 
-func newTx(conn *boltConn) *boltTx {
+func newTx(conn *BoltConn) *boltTx {
 	return &boltTx{
 		conn: conn,
 	}

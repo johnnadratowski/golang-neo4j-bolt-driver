@@ -3,6 +3,7 @@ package golangNeo4jBoltDriver
 import (
 	"bytes"
 	"database/sql/driver"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"time"
@@ -17,10 +18,10 @@ import (
 	"crypto/x509"
 	"strconv"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/mindstand/golang-neo4j-bolt-driver/encoding"
+	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
+	"github.com/mindstand/golang-neo4j-bolt-driver/log"
+	"github.com/mindstand/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Conn represents a connection to Neo4J
@@ -62,7 +63,7 @@ type Conn interface {
 	SetTimeout(time.Duration)
 }
 
-type boltConn struct {
+type BoltConn struct {
 	connStr       string
 	url           *url.URL
 	user          string
@@ -78,52 +79,37 @@ type boltConn struct {
 	caCertFile    string
 	keyFile       string
 	tlsNoVerify   bool
+	readOnly      bool
 	transaction   *boltTx
 	statement     *boltStmt
-	driver        *boltDriver
-	poolDriver    DriverPool
 }
 
-func createBoltConn(connStr string) *boltConn {
-	return &boltConn{
+func createBoltConn(connStr string) (*BoltConn, error) {
+	conn := &BoltConn{
 		connStr:       connStr,
+		connErr:       nil,
 		timeout:       time.Second * time.Duration(60),
 		chunkSize:     math.MaxUint16,
 		serverVersion: make([]byte, 4),
 	}
-}
 
-// newBoltConn Creates a new bolt connection
-func newBoltConn(connStr string, driver *boltDriver) (*boltConn, error) {
-
-	c := createBoltConn(connStr)
-	c.driver = driver
-
-	err := c.initialize()
+	err := conn.initialize()
 	if err != nil {
-		return nil, errors.Wrap(err, "An error occurred initializing connection")
+		return nil, err
 	}
 
-	return c, nil
+	return conn, nil
 }
 
-// newPooledBoltConn Creates a new bolt connection with a pooled driver
-func newPooledBoltConn(connStr string, driver DriverPool) (*boltConn, error) {
-
-	c := createBoltConn(connStr)
-	c.poolDriver = driver
-
-	return c, nil
-}
-
-func (c *boltConn) parseURL() (*url.URL, error) {
+//url, is in a cluster, error
+func (c *BoltConn) parseURL() (*url.URL, error) {
 	user := ""
 	password := ""
 	url, err := url.Parse(c.connStr)
 	if err != nil {
 		return url, errors.Wrap(err, "An error occurred parsing bolt URL")
-	} else if strings.ToLower(url.Scheme) != "bolt" {
-		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' scheme.", url.Scheme)
+	} else if strings.ToLower(url.Scheme) != "bolt" && strings.ToLower(url.Scheme) != "bolt+routing" {
+		return url, errors.New("Unsupported connection string scheme: %s. Driver only supports 'bolt' and 'bolt+routing' scheme.", url.Scheme)
 	}
 
 	if url.User != nil {
@@ -169,7 +155,7 @@ func (c *boltConn) parseURL() (*url.URL, error) {
 	return url, nil
 }
 
-func (c *boltConn) createConn() (net.Conn, error) {
+func (c *BoltConn) createConn() (net.Conn, error) {
 
 	var err error
 	c.url, err = c.parseURL()
@@ -197,7 +183,7 @@ func (c *boltConn) createConn() (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *boltConn) tlsConfig() (*tls.Config, error) {
+func (c *BoltConn) tlsConfig() (*tls.Config, error) {
 	config := &tls.Config{
 		MinVersion: tls.VersionTLS10,
 		MaxVersion: tls.VersionTLS12,
@@ -235,7 +221,7 @@ func (c *boltConn) tlsConfig() (*tls.Config, error) {
 	return config, nil
 }
 
-func (c *boltConn) handShake() error {
+func (c *BoltConn) handShake() error {
 
 	numWritten, err := c.Write(handShake)
 	if numWritten != 20 {
@@ -260,33 +246,16 @@ func (c *boltConn) handShake() error {
 	return nil
 }
 
-func (c *boltConn) initialize() error {
-
-	// Handle recorder. If there is no conn string, assume we're playing back a recording.
-	// If there is a recorder and a conn string, assume we're recording the connection
-	// Else, just create the conn normally
+func (c *BoltConn) initialize() error {
 	var err error
-	if c.connStr == "" && c.driver != nil && c.driver.recorder != nil {
-		c.conn = c.driver.recorder
-	} else if c.driver != nil && c.driver.recorder != nil {
-		c.driver.recorder.Conn, err = c.createConn()
-		if err != nil {
-			// Return the connection back into the pool
-			if e := c.Close(); e != nil {
-				log.Errorf("An error occurred closing connection: %s", e)
-			}
-			return err
+
+	c.conn, err = c.createConn()
+	if err != nil {
+		// Return the connection back into the pool
+		if e := c.Close(); e != nil {
+			log.Errorf("An error occurred closing connection: %s", e)
 		}
-		c.conn = c.driver.recorder
-	} else {
-		c.conn, err = c.createConn()
-		if err != nil {
-			// Return the connection back into the pool
-			if e := c.Close(); e != nil {
-				log.Errorf("An error occurred closing connection: %s", e)
-			}
-			return err
-		}
+		return err
 	}
 
 	if err := c.handShake(); err != nil {
@@ -307,17 +276,18 @@ func (c *boltConn) initialize() error {
 	switch resp := respInt.(type) {
 	case messages.SuccessMessage:
 		log.Infof("Successfully initiated Bolt connection: %+v", resp)
-		return nil
 	default:
 		log.Errorf("Got an unrecognized message when initializing connection :%+v", resp)
 		c.connErr = errors.New("Unrecognized response from the server: %#v", resp)
 		c.Close()
 		return driver.ErrBadConn
 	}
+
+	return nil
 }
 
 // Read reads the data from the underlying connection
-func (c *boltConn) Read(b []byte) (n int, err error) {
+func (c *BoltConn) Read(b []byte) (n int, err error) {
 	if err := c.conn.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
 		c.connErr = errors.Wrap(err, "An error occurred setting read deadline")
 		return 0, driver.ErrBadConn
@@ -337,7 +307,7 @@ func (c *boltConn) Read(b []byte) (n int, err error) {
 }
 
 // Write writes the data to the underlying connection
-func (c *boltConn) Write(b []byte) (n int, err error) {
+func (c *BoltConn) Write(b []byte) (n int, err error) {
 	if err := c.conn.SetWriteDeadline(time.Now().Add(c.timeout)); err != nil {
 		c.connErr = errors.Wrap(err, "An error occurred setting write deadline")
 		return 0, driver.ErrBadConn
@@ -358,7 +328,7 @@ func (c *boltConn) Write(b []byte) (n int, err error) {
 
 // Close closes the connection
 // Driver may allow for pooling in the future, keeping connections alive
-func (c *boltConn) Close() error {
+func (c *BoltConn) Close() error {
 
 	if c.closed {
 		return nil
@@ -376,15 +346,8 @@ func (c *boltConn) Close() error {
 		}
 	}
 
-	if c.poolDriver != nil {
-		// If using connection pooling, don't close connection, just reclaim it
-		err := c.poolDriver.reclaim(c)
-		if err != nil {
-			log.Errorf("An error occurred reclaiming connection for pool: %s", err)
-			c.connErr = errors.Wrap(err, "An error occurred closing the connection")
-			return driver.ErrBadConn
-		}
-		return nil
+	if c.conn == nil {
+		return errors.New("can not close nil connection")
 	}
 
 	if c.conn != nil {
@@ -399,7 +362,7 @@ func (c *boltConn) Close() error {
 	return nil
 }
 
-func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
+func (c *BoltConn) ackFailure(failure messages.FailureMessage) error {
 	log.Infof("Acknowledging Failure: %#v", failure)
 
 	ack := messages.NewAckFailureMessage()
@@ -433,7 +396,7 @@ func (c *boltConn) ackFailure(failure messages.FailureMessage) error {
 	}
 }
 
-func (c *boltConn) reset() error {
+func (c *BoltConn) reset() error {
 	log.Info("Resetting session")
 
 	reset := messages.NewResetMessage()
@@ -472,17 +435,17 @@ func (c *boltConn) reset() error {
 }
 
 // Prepare prepares a new statement for a query
-func (c *boltConn) Prepare(query string) (driver.Stmt, error) {
+func (c *BoltConn) Prepare(query string) (driver.Stmt, error) {
 	return c.prepare(query)
 }
 
 // Prepare prepares a new statement for a query. Implements a Neo-friendly alternative to sql/driver.
-func (c *boltConn) PrepareNeo(query string) (Stmt, error) {
+func (c *BoltConn) PrepareNeo(query string) (Stmt, error) {
 	return c.prepare(query)
 }
 
 // PreparePipeline prepares a new pipeline statement for a query.
-func (c *boltConn) PreparePipeline(queries ...string) (PipelineStmt, error) {
+func (c *BoltConn) PreparePipeline(queries ...string) (PipelineStmt, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -493,7 +456,7 @@ func (c *boltConn) PreparePipeline(queries ...string) (PipelineStmt, error) {
 	return c.statement, nil
 }
 
-func (c *boltConn) prepare(query string) (*boltStmt, error) {
+func (c *BoltConn) prepare(query string) (*boltStmt, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -505,7 +468,7 @@ func (c *boltConn) prepare(query string) (*boltStmt, error) {
 }
 
 // Begin begins a new transaction with the Neo4J Database
-func (c *boltConn) Begin() (driver.Tx, error) {
+func (c *BoltConn) Begin() (driver.Tx, error) {
 	if c.transaction != nil {
 		return nil, errors.New("An open transaction already exists")
 	}
@@ -539,16 +502,16 @@ func (c *boltConn) Begin() (driver.Tx, error) {
 }
 
 // Sets the size of the chunks to write to the stream
-func (c *boltConn) SetChunkSize(chunkSize uint16) {
+func (c *BoltConn) SetChunkSize(chunkSize uint16) {
 	c.chunkSize = chunkSize
 }
 
 // Sets the timeout for reading and writing to the stream
-func (c *boltConn) SetTimeout(timeout time.Duration) {
+func (c *BoltConn) SetTimeout(timeout time.Duration) {
 	c.timeout = timeout
 }
 
-func (c *boltConn) consume() (interface{}, error) {
+func (c *BoltConn) consume() (interface{}, error) {
 	log.Info("Consuming response from bolt stream")
 
 	respInt, err := encoding.NewDecoder(c).Decode()
@@ -572,7 +535,7 @@ func (c *boltConn) consume() (interface{}, error) {
 	return respInt, err
 }
 
-func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
+func (c *BoltConn) consumeAll() ([]interface{}, interface{}, error) {
 	log.Info("Consuming all responses until success/failure")
 
 	responses := []interface{}{}
@@ -591,7 +554,7 @@ func (c *boltConn) consumeAll() ([]interface{}, interface{}, error) {
 	}
 }
 
-func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{}, error) {
+func (c *BoltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{}, error) {
 	log.Infof("Consuming all responses %d times until success/failure", mult)
 
 	responses := make([][]interface{}, mult)
@@ -610,7 +573,7 @@ func (c *boltConn) consumeAllMultiple(mult int) ([][]interface{}, []interface{},
 	return responses, successes, nil
 }
 
-func (c *boltConn) sendInit() (interface{}, error) {
+func (c *BoltConn) sendInit() (interface{}, error) {
 	log.Infof("Sending INIT Message. ClientID: %s User: %s", ClientID, c.user)
 
 	initMessage := messages.NewInitMessage(ClientID, c.user, c.password)
@@ -621,7 +584,7 @@ func (c *boltConn) sendInit() (interface{}, error) {
 	return c.consume()
 }
 
-func (c *boltConn) sendRun(query string, args map[string]interface{}) error {
+func (c *BoltConn) sendRun(query string, args map[string]interface{}) error {
 	log.Infof("Sending RUN message: query %s (args: %#v)", query, args)
 	runMessage := messages.NewRunMessage(query, args)
 	if err := encoding.NewEncoder(c, c.chunkSize).Encode(runMessage); err != nil {
@@ -631,7 +594,7 @@ func (c *boltConn) sendRun(query string, args map[string]interface{}) error {
 	return nil
 }
 
-func (c *boltConn) sendRunConsume(query string, args map[string]interface{}) (interface{}, error) {
+func (c *BoltConn) sendRunConsume(query string, args map[string]interface{}) (interface{}, error) {
 	if err := c.sendRun(query, args); err != nil {
 		return nil, err
 	}
@@ -639,7 +602,7 @@ func (c *boltConn) sendRunConsume(query string, args map[string]interface{}) (in
 	return c.consume()
 }
 
-func (c *boltConn) sendPullAll() error {
+func (c *BoltConn) sendPullAll() error {
 	log.Infof("Sending PULL_ALL message")
 
 	pullAllMessage := messages.NewPullAllMessage()
@@ -651,7 +614,7 @@ func (c *boltConn) sendPullAll() error {
 	return nil
 }
 
-func (c *boltConn) sendPullAllConsume() (interface{}, error) {
+func (c *BoltConn) sendPullAllConsume() (interface{}, error) {
 	if err := c.sendPullAll(); err != nil {
 		return nil, err
 	}
@@ -659,7 +622,7 @@ func (c *boltConn) sendPullAllConsume() (interface{}, error) {
 	return c.consume()
 }
 
-func (c *boltConn) sendRunPullAll(query string, args map[string]interface{}) error {
+func (c *BoltConn) sendRunPullAll(query string, args map[string]interface{}) error {
 	err := c.sendRun(query, args)
 	if err != nil {
 		return err
@@ -668,7 +631,7 @@ func (c *boltConn) sendRunPullAll(query string, args map[string]interface{}) err
 	return c.sendPullAll()
 }
 
-func (c *boltConn) sendRunPullAllConsumeRun(query string, args map[string]interface{}) (interface{}, error) {
+func (c *BoltConn) sendRunPullAllConsumeRun(query string, args map[string]interface{}) (interface{}, error) {
 	err := c.sendRunPullAll(query, args)
 	if err != nil {
 		return nil, err
@@ -677,7 +640,7 @@ func (c *boltConn) sendRunPullAllConsumeRun(query string, args map[string]interf
 	return c.consume()
 }
 
-func (c *boltConn) sendRunPullAllConsumeSingle(query string, args map[string]interface{}) (interface{}, interface{}, error) {
+func (c *BoltConn) sendRunPullAllConsumeSingle(query string, args map[string]interface{}) (interface{}, interface{}, error) {
 	err := c.sendRunPullAll(query, args)
 	if err != nil {
 		return nil, nil, err
@@ -692,7 +655,7 @@ func (c *boltConn) sendRunPullAllConsumeSingle(query string, args map[string]int
 	return runSuccess, pullSuccess, err
 }
 
-func (c *boltConn) sendRunPullAllConsumeAll(query string, args map[string]interface{}) (interface{}, interface{}, []interface{}, error) {
+func (c *BoltConn) sendRunPullAllConsumeAll(query string, args map[string]interface{}) (interface{}, interface{}, []interface{}, error) {
 	err := c.sendRunPullAll(query, args)
 	if err != nil {
 		return nil, nil, nil, err
@@ -707,7 +670,7 @@ func (c *boltConn) sendRunPullAllConsumeAll(query string, args map[string]interf
 	return runSuccess, pullSuccess, records, err
 }
 
-func (c *boltConn) sendDiscardAll() error {
+func (c *BoltConn) sendDiscardAll() error {
 	log.Infof("Sending DISCARD_ALL message")
 
 	discardAllMessage := messages.NewDiscardAllMessage()
@@ -719,7 +682,7 @@ func (c *boltConn) sendDiscardAll() error {
 	return nil
 }
 
-func (c *boltConn) sendDiscardAllConsume() (interface{}, error) {
+func (c *BoltConn) sendDiscardAllConsume() (interface{}, error) {
 	if err := c.sendDiscardAll(); err != nil {
 		return nil, err
 	}
@@ -727,7 +690,7 @@ func (c *boltConn) sendDiscardAllConsume() (interface{}, error) {
 	return c.consume()
 }
 
-func (c *boltConn) sendRunDiscardAll(query string, args map[string]interface{}) error {
+func (c *BoltConn) sendRunDiscardAll(query string, args map[string]interface{}) error {
 	err := c.sendRun(query, args)
 	if err != nil {
 		return err
@@ -736,7 +699,7 @@ func (c *boltConn) sendRunDiscardAll(query string, args map[string]interface{}) 
 	return c.sendDiscardAll()
 }
 
-func (c *boltConn) sendRunDiscardAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
+func (c *BoltConn) sendRunDiscardAllConsume(query string, args map[string]interface{}) (interface{}, interface{}, error) {
 	runResp, err := c.sendRunConsume(query, args)
 	if err != nil {
 		return runResp, nil, err
@@ -746,7 +709,7 @@ func (c *boltConn) sendRunDiscardAllConsume(query string, args map[string]interf
 	return runResp, discardResp, err
 }
 
-func (c *boltConn) Query(query string, args []driver.Value) (driver.Rows, error) {
+func (c *BoltConn) Query(query string, args []driver.Value) (driver.Rows, error) {
 	params, err := driverArgsToMap(args)
 	if err != nil {
 		return nil, err
@@ -754,11 +717,11 @@ func (c *boltConn) Query(query string, args []driver.Value) (driver.Rows, error)
 	return c.queryNeo(query, params)
 }
 
-func (c *boltConn) QueryNeo(query string, params map[string]interface{}) (Rows, error) {
+func (c *BoltConn) QueryNeo(query string, params map[string]interface{}) (Rows, error) {
 	return c.queryNeo(query, params)
 }
 
-func (c *boltConn) QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
+func (c *BoltConn) QueryNeoAll(query string, params map[string]interface{}) ([][]interface{}, map[string]interface{}, map[string]interface{}, error) {
 	rows, err := c.queryNeo(query, params)
 	if err != nil {
 		return nil, nil, nil, err
@@ -769,7 +732,7 @@ func (c *boltConn) QueryNeoAll(query string, params map[string]interface{}) ([][
 	return data, rows.metadata, metadata, err
 }
 
-func (c *boltConn) queryNeo(query string, params map[string]interface{}) (*boltRows, error) {
+func (c *BoltConn) queryNeo(query string, params map[string]interface{}) (*boltRows, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -777,25 +740,32 @@ func (c *boltConn) queryNeo(query string, params map[string]interface{}) (*boltR
 		return nil, errors.New("Connection already closed")
 	}
 
+	c.statement = nil
+
 	c.statement = newStmt(query, c)
 
 	// Pipeline the run + pull all for this
 	successResp, err := c.sendRunPullAllConsumeRun(c.statement.query, params)
 	if err != nil {
-		c.statement.Close()
+		if wErr := c.statement.Close(); wErr != nil {
+			return nil, fmt.Errorf("statement close failed, %v, %w", wErr, err)
+		}
 		return nil, err
 	}
 	success, ok := successResp.(messages.SuccessMessage)
 	if !ok {
-		c.statement.Close()
+		if wErr := c.statement.Close(); wErr != nil {
+			return nil, fmt.Errorf("unexpected response querying neo from connection: %#v, %w", successResp, wErr)
+		}
 		return nil, errors.New("Unexpected response querying neo from connection: %#v", successResp)
 	}
 
 	c.statement.rows = newQueryRows(c.statement, success.Metadata)
+
 	return c.statement.rows, nil
 }
 
-func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interface{}) (PipelineRows, error) {
+func (c *BoltConn) QueryPipeline(queries []string, params ...map[string]interface{}) (PipelineRows, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -817,7 +787,7 @@ func (c *boltConn) QueryPipeline(queries []string, params ...map[string]interfac
 
 // Exec executes a query that returns no rows. See sql/driver.Stmt.
 // You must bolt encode a map to pass as []bytes for the driver value
-func (c *boltConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+func (c *BoltConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -832,7 +802,7 @@ func (c *boltConn) Exec(query string, args []driver.Value) (driver.Result, error
 }
 
 // ExecNeo executes a query that returns no rows. Implements a Neo-friendly alternative to sql/driver.
-func (c *boltConn) ExecNeo(query string, params map[string]interface{}) (Result, error) {
+func (c *BoltConn) ExecNeo(query string, params map[string]interface{}) (Result, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}
@@ -846,7 +816,7 @@ func (c *boltConn) ExecNeo(query string, params map[string]interface{}) (Result,
 	return stmt.ExecNeo(params)
 }
 
-func (c *boltConn) ExecPipeline(queries []string, params ...map[string]interface{}) ([]Result, error) {
+func (c *BoltConn) ExecPipeline(queries []string, params ...map[string]interface{}) ([]Result, error) {
 	if c.statement != nil {
 		return nil, errors.New("An open statement already exists")
 	}

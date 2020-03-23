@@ -5,25 +5,25 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
+	"github.com/mindstand/golang-neo4j-bolt-driver/structures/messages"
 )
 
 func TestBoltConn_parseURL(t *testing.T) {
-	c := &boltConn{connStr: "http://foo:7687"}
+	c := &BoltConn{connStr: "http://foo:7687"}
 
 	_, err := c.parseURL()
 	if err == nil {
 		t.Fatal("Expected error from incorrect protocol")
 	}
 
-	c = &boltConn{connStr: "bolt://john@foo:7687"}
+	c = &BoltConn{connStr: "bolt://john@foo:7687"}
 	_, err = c.parseURL()
 	if err == nil {
 		t.Fatal("Expected error from missing password")
 	}
 
-	c = &boltConn{connStr: "bolt://john:password@foo:7687"}
+	c = &BoltConn{connStr: "bolt://john:password@foo:7687"}
 	_, err = c.parseURL()
 	if err != nil {
 		t.Fatal("Should not error on valid url")
@@ -35,7 +35,7 @@ func TestBoltConn_parseURL(t *testing.T) {
 		t.Fatal("Expected password to be 'password'")
 	}
 
-	c = &boltConn{connStr: "bolt://john:password@foo:7687?tls=true"}
+	c = &BoltConn{connStr: "bolt://john:password@foo:7687?tls=true"}
 	_, err = c.parseURL()
 	if err != nil {
 		t.Fatal("Should not error on valid url")
@@ -44,7 +44,7 @@ func TestBoltConn_parseURL(t *testing.T) {
 		t.Fatal("Expected to use TLS")
 	}
 
-	c = &boltConn{connStr: "bolt://john:password@foo:7687?tls=true&tls_no_verify=1&tls_ca_cert_file=ca&tls_cert_file=cert&tls_key_file=key"}
+	c = &BoltConn{connStr: "bolt://john:password@foo:7687?tls=true&tls_no_verify=1&tls_ca_cert_file=ca&tls_cert_file=cert&tls_key_file=key"}
 	_, err = c.parseURL()
 	if err != nil {
 		t.Fatal("Should not error on valid url")
@@ -82,7 +82,7 @@ func TestBoltConn_Close(t *testing.T) {
 		t.Fatalf("An error occurred closing conn: %s", err)
 	}
 
-	if !conn.(*boltConn).closed {
+	if !conn.(*BoltConn).closed {
 		t.Error("Conn not closed at end of test")
 	}
 }

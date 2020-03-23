@@ -3,9 +3,9 @@ package golangNeo4jBoltDriver
 import (
 	"database/sql/driver"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/log"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/mindstand/golang-neo4j-bolt-driver/errors"
+	"github.com/mindstand/golang-neo4j-bolt-driver/log"
+	"github.com/mindstand/golang-neo4j-bolt-driver/structures/messages"
 )
 
 // Stmt represents a statement to run against the database
@@ -40,16 +40,16 @@ type PipelineStmt interface {
 type boltStmt struct {
 	queries []string
 	query   string
-	conn    *boltConn
+	conn    *BoltConn
 	closed  bool
 	rows    *boltRows
 }
 
-func newStmt(query string, conn *boltConn) *boltStmt {
+func newStmt(query string, conn *BoltConn) *boltStmt {
 	return &boltStmt{query: query, conn: conn}
 }
 
-func newPipelineStmt(queries []string, conn *boltConn) *boltStmt {
+func newPipelineStmt(queries []string, conn *BoltConn) *boltStmt {
 	return &boltStmt{queries: queries, conn: conn}
 }
 
