@@ -387,11 +387,13 @@ func (c *boltConn) Close() error {
 		return nil
 	}
 
-	err := c.conn.Close()
-	c.closed = true
-	if err != nil {
-		c.connErr = errors.Wrap(err, "An error occurred closing the connection")
-		return driver.ErrBadConn
+	if c.conn != nil {
+		err := c.conn.Close()
+		c.closed = true
+		if err != nil {
+			c.connErr = errors.Wrap(err, "An error occurred closing the connection")
+			return driver.ErrBadConn
+		}
 	}
 
 	return nil
