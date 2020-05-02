@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/errors"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/structures/messages"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/errors"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/structures/messages"
 )
 
 func TestBoltConn_parseURL(t *testing.T) {

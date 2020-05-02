@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
-	"github.com/johnnadratowski/golang-neo4j-bolt-driver/encoding"
+	"github.com/ONSdigital/golang-neo4j-bolt-driver/encoding"
 	"math"
 )
 
