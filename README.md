@@ -1,5 +1,5 @@
 # Golang Neo4J Bolt Driver
-[![Build Status](https://travis-ci.org/ONSdigital/golang-neo4j-bolt-driver.svg?branch=master)](https://travis-ci.org/ONSdigital/golang-neo4j-bolt-driver)
+
 [![GoDoc](https://godoc.org/github.com/ONSdigital/golang-neo4j-bolt-driver?status.svg)](https://godoc.org/github.com/ONSdigital/golang-neo4j-bolt-driver)
 
 
